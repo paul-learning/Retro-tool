@@ -77,7 +77,7 @@ export default function Page() {
             >
               <div style={{ whiteSpace: "pre-wrap" }}>{note.text}</div>
               <div style={{ marginTop: 10 }}>
-                <button className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"> Delete</button>
+                <button onClick={() => deleteNote(note.id)}>Delete</button>
               </div>
             </div>
           ))}
