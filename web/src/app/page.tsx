@@ -45,14 +45,14 @@ export default function Page() {
         minHeight: "100vh",
         display: "flex",
         flexDirection: "column",
-        background: "#f7f7f7",
-        color: "#111",
+        background: "#8a8282ff",
+        color: "#ffffffff",
         fontFamily: "system-ui",
       }}
     >
       {/* Header */}
       <div style={{ padding: 24 }}>
-        <h1 style={{ fontSize: 24, fontWeight: 700 }}>Retro Notes</h1>
+        <h1 style={{ fontSize: 24, fontWeight: 700 }}>Notes</h1>
       </div>
 
       {/* Notes area */}
@@ -69,7 +69,7 @@ export default function Page() {
             <div
               key={note.id}
               style={{
-                background: "#fff8a6",
+                background: "#056facff",
                 padding: 12,
                 borderRadius: 14,
                 boxShadow: "0 6px 18px rgba(0,0,0,0.08)",
