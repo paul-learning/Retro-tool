@@ -1,11 +1,26 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useNotes } from "./useNotes";
 
-export default function Page() {
-  const { notes, text, setText, addNote, deleteNote } = useNotes();
 
+export default function Page() {
+  const {
+    notes,
+    text,
+    setText,
+    addNote,
+    deleteNote,
+    editingId,
+    editingText,
+    setEditingText,
+    startEdit,
+    focusEditor,
+    commitEdit,
+    editorRef,
+  } = useNotes();
+
+  
   return (
     <main className="min-h-screen bg-[#0B0D12] text-zinc-100">
       {/* subtle glow */}
@@ -48,12 +63,55 @@ export default function Page() {
                 className="group rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_14px_50px_rgba(0,0,0,0.35)] transition hover:border-white/15 hover:bg-white/[0.06]"
               >
                 <div className="p-4">
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/90">
-                    {note.text}
-                  </div>
+                  {editingId === note.id ? (
+                    <textarea
+                      ref={editorRef}
+                      value={editingText}
+                      onChange={(e) => setEditingText(e.target.value)}
+                      rows={3}
+                      className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm leading-relaxed text-zinc-100/90 outline-none transition focus:border-indigo-400/40 focus:ring-4 focus:ring-indigo-500/10"
+                      onKeyDown={(e) => {
+                        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                          e.preventDefault();
+                          commitEdit();
+                        }
+                      }}
+                      // optional: commit on blur (NOT requested; leaving out for now)
+                    />
+                  ) : (
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/90">
+                      {note.text}
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center justify-end border-t border-white/10 px-1 py-1">
+
+                <div className="flex items-center justify-between border-t border-white/10 px-1 py-1">
+                  <button
+                    onClick={() => {
+                      startEdit(note);
+                      focusEditor();
+                    }}
+                    aria-label="Edit note"
+                    title="Edit"
+                    className="
+                      inline-flex items-center justify-center
+                      rounded-lg
+                      border border-white/10
+                      bg-white/[0.03]
+                      p-1
+                      text-zinc-400
+                      transition
+                      hover:bg-white/[0.06]
+                      hover:text-zinc-200
+                      focus:outline-none
+                      focus:ring-2
+                      focus:ring-indigo-500/20
+                    "
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+
                   <button
                     onClick={() => deleteNote(note.id)}
                     aria-label="Delete note"
@@ -76,6 +134,7 @@ export default function Page() {
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
+
               </article>
             ))}
           </div>
