@@ -32,7 +32,7 @@ jobs:
             git reset --hard origin/master
 
             echo "3) docker compose build/up web"
-            docker compose -f docker-compose.prod.yml up -d --build web
+            docker compose -f docker-compose.prod.yml up -d --build caddy web
 
             echo "4) done, ps:"
             docker compose -f docker-compose.prod.yml ps
