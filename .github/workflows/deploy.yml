@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Deploy over SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -15,14 +16,23 @@ jobs:
           username: ${{ secrets.VM_USER }}
           key: ${{ secrets.VM_SSH_KEY }}
           port: ${{ secrets.VM_PORT || 22 }}
+
+          # ⬇⬇⬇ ADD THIS HERE
+          command_timeout: 20m
+
+          # ⬇⬇⬇ REPLACE YOUR SCRIPT WITH THIS
           script: |
             set -euo pipefail
 
+            echo "1) cd repo"
             cd /home/${{ secrets.VM_USER }}/Retro-tool
 
+            echo "2) git fetch/reset"
             git fetch --all
             git reset --hard origin/master
 
+            echo "3) docker compose build/up web"
             docker compose -f docker-compose.prod.yml up -d --build web
 
+            echo "4) done, ps:"
             docker compose -f docker-compose.prod.yml ps
