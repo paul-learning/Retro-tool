@@ -1,20 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-type Note = {
-  id: string;
-  text: string;
-};
+import { Trash2 } from "lucide-react";
+import type { Note } from "@/lib/notesDb";
+import { listNotes, addNote as addLocalNote, deleteNote as deleteLocalNote } from "@/lib/notesDb";
 
 export default function Page() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [text, setText] = useState("");
 
   async function loadNotes() {
-    const res = await fetch("/api/notes");
-    setNotes(await res.json());
+    setNotes(await listNotes());
   }
+
 
   useEffect(() => {
     loadNotes();
@@ -24,20 +22,17 @@ export default function Page() {
     const value = text.trim();
     if (!value) return;
 
-    await fetch("/api/notes", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: value }),
-    });
-
+    await addLocalNote(value);
     setText("");
     loadNotes();
   }
 
+
   async function deleteNote(id: string) {
-    await fetch(`/api/notes/${id}`, { method: "DELETE" });
+    await deleteLocalNote(id);
     loadNotes();
   }
+
 
   return (
     <main className="min-h-screen bg-[#0B0D12] text-zinc-100">
@@ -88,12 +83,27 @@ export default function Page() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end border-t border-white/10 px-3 py-2">
+                <div className="flex items-center justify-end border-t border-white/10 px-1 py-1">
                   <button
                     onClick={() => deleteNote(note.id)}
-                    className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-zinc-200/90 transition hover:bg-white/[0.06]"
+                    aria-label="Delete note"
+                    title="Delete"
+                    className="
+                      inline-flex items-center justify-center
+                      rounded-lg
+                      border border-white/10
+                      bg-white/[0.03]
+                      p-1
+                      text-zinc-400
+                      transition
+                      hover:bg-white/[0.06]
+                      hover:text-zinc-200
+                      focus:outline-none
+                      focus:ring-2
+                      focus:ring-red-500/20
+                    "
                   >
-                    Delete
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               </article>
