@@ -77,6 +77,39 @@ export async function addNote(text: string): Promise<Note> {
   await tx(db, "readwrite", (store) => store.put(note));
   return note;
 }
+export async function updateNote(id: string, text: string): Promise<void> {
+  const db = await openDb();
+  const now = Date.now();
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction("notes", "readwrite");
+    const store = transaction.objectStore("notes");
+
+    const getReq = store.get(id);
+
+    getReq.onsuccess = () => {
+      const existing = getReq.result as Note | undefined;
+      if (!existing) {
+        resolve();
+        return;
+      }
+
+      const updated: Note = {
+        ...existing,
+        text,
+        updatedAt: now,
+      };
+
+      store.put(updated);
+    };
+
+    getReq.onerror = () => reject(getReq.error);
+
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+}
 
 export async function deleteNote(id: string): Promise<void> {
   const db = await openDb();
