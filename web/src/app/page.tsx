@@ -1,38 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Trash2 } from "lucide-react";
-import type { Note } from "@/lib/notesDb";
-import { listNotes, addNote as addLocalNote, deleteNote as deleteLocalNote } from "@/lib/notesDb";
+import { useNotes } from "./useNotes";
 
 export default function Page() {
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [text, setText] = useState("");
-
-  async function loadNotes() {
-    setNotes(await listNotes());
-  }
-
-
-  useEffect(() => {
-    loadNotes();
-  }, []);
-
-  async function addNote() {
-    const value = text.trim();
-    if (!value) return;
-
-    await addLocalNote(value);
-    setText("");
-    loadNotes();
-  }
-
-
-  async function deleteNote(id: string) {
-    await deleteLocalNote(id);
-    loadNotes();
-  }
-
+  const { notes, text, setText, addNote, deleteNote } = useNotes();
 
   return (
     <main className="min-h-screen bg-[#0B0D12] text-zinc-100">
@@ -49,9 +21,7 @@ export default function Page() {
             <h1 className="text-lg font-semibold tracking-[-0.02em]">
               Your Notes
             </h1>
-            <p className="mt-1 text-xs text-zinc-400">
-              {notes.length} notes
-            </p>
+            <p className="mt-1 text-xs text-zinc-400">{notes.length} notes</p>
           </div>
           <span className="hidden sm:inline rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
             ⌘/Ctrl + Enter
