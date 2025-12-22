@@ -47,7 +47,7 @@ export default function Page() {
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-5">
           <div>
             <h1 className="text-lg font-semibold tracking-[-0.02em]">
-              Deployed again by github actions: Notes
+              Notes
             </h1>
             <p className="mt-1 text-xs text-zinc-400">
               {notes.length} notes
