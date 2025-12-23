@@ -17,6 +17,7 @@ export default function Page() {
     startEdit,
     focusEditor,
     commitEdit,
+    cancelEdit, 
     editorRef,
   } = useNotes();
 
@@ -71,12 +72,24 @@ export default function Page() {
                       rows={3}
                       className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm leading-relaxed text-zinc-100/90 outline-none transition focus:border-indigo-400/40 focus:ring-4 focus:ring-indigo-500/10"
                       onKeyDown={(e) => {
+                        // Save on Ctrl/Cmd+Enter
                         if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                           e.preventDefault();
                           commitEdit();
+                          return;
+                        }
+
+                        // Stop editing on Escape (no save)
+                        if (e.key === "Escape") {
+                          e.preventDefault();
+                          cancelEdit();
+                          return;
                         }
                       }}
-                      // optional: commit on blur (NOT requested; leaving out for now)
+                      onBlur={() => {
+                        // Save when leaving the field
+                        commitEdit();
+                      }}
                     />
                   ) : (
                     <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/90">
