@@ -60,7 +60,7 @@ export default function Page() {
             {notes.map((note) => (
               <article
                 key={note.id}
-                className="group rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_14px_50px_rgba(0,0,0,0.35)] transition hover:border-white/15 hover:bg-white/[0.06]"
+                className="group rounded-2xl bg-white/[0.04] shadow-[0_14px_50px_rgba(0,0,0,0.35)] transition hover:border-white/15 hover:bg-white/[0.06]"
               >
                 <div className="p-4">
                   {editingId === note.id ? (
@@ -86,7 +86,7 @@ export default function Page() {
                 </div>
 
 
-                <div className="flex items-center justify-between border-t border-white/10 px-1 py-1">
+                <div className="flex items-center justify-between 0 px-1 py-1">
                   <button
                     onClick={() => {
                       startEdit(note);
