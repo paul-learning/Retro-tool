@@ -2,6 +2,8 @@
 
 import { Pencil, Trash2 } from "lucide-react";
 import { useNotes } from "./useNotes";
+import { useEffect, useState } from "react";
+
 
 
 export default function Page() {
@@ -21,7 +23,22 @@ export default function Page() {
     editorRef,
   } = useNotes();
 
-  
+  const [menu, setMenu] = useState<{
+  open: boolean;
+  x: number;
+  y: number;
+  noteId: string | null;
+}>({ open: false, x: 0, y: 0, noteId: null });
+
+function closeMenu() {
+  setMenu((m) => ({ ...m, open: false, noteId: null }));
+}
+
+function openMenu(e: React.MouseEvent, noteId: string) {
+  e.preventDefault(); // stop browser context menu
+  setMenu({ open: true, x: e.clientX, y: e.clientY, noteId });
+}
+
   return (
     <main className="min-h-screen bg-[#0B0D12] text-zinc-100">
       {/* subtle glow */}
@@ -61,8 +78,13 @@ export default function Page() {
             {notes.map((note) => (
               <article
                 key={note.id}
-                className="group rounded-2xl bg-white/[0.04] shadow-[0_14px_50px_rgba(0,0,0,0.35)] transition hover:border-white/15 hover:bg-white/[0.06]"
-              >
+                onClick={() => {
+                  startEdit(note);
+                  focusEditor();
+                }}
+                onContextMenu={(e) => openMenu(e, note.id)}
+                className="group cursor-text rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_14px_50px_rgba(0,0,0,0.35)] transition hover:border-white/15 hover:bg-white/[0.06]"
+>
                 <div className="p-4">
                   {editingId === note.id ? (
                     <textarea
@@ -71,6 +93,12 @@ export default function Page() {
                       onChange={(e) => setEditingText(e.target.value)}
                       rows={3}
                       className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm leading-relaxed text-zinc-100/90 outline-none transition focus:border-indigo-400/40 focus:ring-4 focus:ring-indigo-500/10"
+                      onClick={(e) => e.stopPropagation()}
+                      onContextMenu={(e) => {
+                        // allow context menu even while editing
+                        e.stopPropagation();
+                        openMenu(e, note.id);
+                      }}
                       onKeyDown={(e) => {
                         // Save on Ctrl/Cmd+Enter
                         if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -179,6 +207,87 @@ export default function Page() {
           </button>
         </div>
       </footer>
+      {menu.open && menu.noteId && (
+  <div
+    className="fixed inset-0 z-50"
+    onMouseDown={(e) => {
+      // click outside closes
+      e.stopPropagation();
+      closeMenu();
+    }}
+  >
+    <div
+      className="absolute min-w-[160px] rounded-xl border border-white/10 bg-[#0B0D12]/95 p-1 text-sm text-zinc-200 shadow-[0_18px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+      style={{ left: menu.x, top: menu.y }}
+      onMouseDown={(e) => e.stopPropagation()} // don't close when clicking menu itself
+    >
+      <button
+        className="w-full rounded-lg px-3 py-2 text-left hover:bg-white/5"
+        onClick={() => {
+          const n = notes.find((n) => n.id === menu.noteId);
+          if (n) {
+            startEdit(n);
+            focusEditor();
+          }
+          closeMenu();
+        }}
+      >
+        Edit
+      </button>
+
+      <button
+        className="w-full rounded-lg px-3 py-2 text-left text-red-300 hover:bg-white/5"
+        onClick={() => {
+          deleteNote(menu.noteId!);
+          closeMenu();
+        }}
+      >
+        Delete
+      </button>
+    </div>
+  </div>
+)}
+  {menu.open && menu.noteId && (
+    <div
+      className="fixed inset-0 z-50"
+      onMouseDown={(e) => {
+        // click outside closes
+        e.stopPropagation();
+        closeMenu();
+      }}
+    >
+      <div
+        className="absolute min-w-[160px] rounded-xl border border-white/10 bg-[#0B0D12]/95 p-1 text-sm text-zinc-200 shadow-[0_18px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl"
+        style={{ left: menu.x, top: menu.y }}
+        onMouseDown={(e) => e.stopPropagation()} // don't close when clicking menu itself
+      >
+        <button
+          className="w-full rounded-lg px-3 py-2 text-left hover:bg-white/5"
+          onClick={() => {
+            const n = notes.find((n) => n.id === menu.noteId);
+            if (n) {
+              startEdit(n);
+              focusEditor();
+            }
+            closeMenu();
+          }}
+        >
+          Edit
+        </button>
+
+        <button
+          className="w-full rounded-lg px-3 py-2 text-left text-red-300 hover:bg-white/5"
+          onClick={() => {
+            deleteNote(menu.noteId!);
+            closeMenu();
+          }}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  )}
+
     </main>
   );
 }
