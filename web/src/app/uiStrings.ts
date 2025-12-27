@@ -3,7 +3,7 @@ export const UI = {
   keyboardHint: "⌘/Ctrl + Enter",
 
   emptyStateTitle: "No notes yet",
-  emptyStateBody: "Add your first note below.",
+  emptyStateBody: "Add your first note below with the +.",
 
   menuEdit: "Edit",
   menuDelete: "Delete",
