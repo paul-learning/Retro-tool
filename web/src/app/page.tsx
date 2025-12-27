@@ -1,10 +1,8 @@
 "use client";
 
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Trash2, Plus } from "lucide-react";
 import { useNotes } from "./useNotes";
-import { useState } from "react";
-
-
+import { useEffect, useRef, useState } from "react";
 
 export default function Page() {
 const {
@@ -19,6 +17,21 @@ const {
 } = useNotes();
 
   const [modalOpen, setModalOpen] = useState(false);
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+
+useEffect(() => {
+  if (!modalOpen) return;
+  const el = taRef.current;
+  if (!el) return;
+
+  // reset then grow to content height
+  el.style.height = "auto";
+
+  // cap to viewport (match your modal max: 100vh - 8rem, minus padding/header feel)
+  const max = window.innerHeight - 8 * 16; // 8rem
+  el.style.height = Math.min(el.scrollHeight, max - 32 /*modal padding*/ ) + "px";
+}, [modalOpen, draft]);
+
 
   const [menu, setMenu] = useState<{
   open: boolean;
@@ -191,36 +204,28 @@ function openMenu(e: React.MouseEvent, noteId: string) {
         startCreate();
         setModalOpen(true);
       }}
-  className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full bg-indigo-600 text-white text-3xl shadow-xl transition hover:bg-indigo-500"
-
+  className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full bg-indigo-600 text-white text-3xl shadow-xl transition hover:bg-indigo-500 flex items-center justify-center leading-none"
     >
-      +
+    <Plus className="h-7 w-7" />
   </button>
       {modalOpen && (
   <div
-    className="fixed inset-0 z-50 flex items-start justify-center
-               bg-black/50 backdrop-blur-sm"
+    className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm"
     onMouseDown={() => {
       commitDraft();
       setModalOpen(false);
     }}
   >
     <div
-      className="mt-24 w-full max-w-xl rounded-2xl
-                 border border-white/10 bg-[#0B0D12]
-                 p-4 shadow-2xl"
+      className="mt-24 w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col max-h-[calc(100vh-8rem)]"
       onMouseDown={(e) => e.stopPropagation()}
     >
       <textarea
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
-        rows={6}
+        ref={taRef}
         autoFocus
-        className="w-full resize-none rounded-xl
-                   border border-white/10 bg-white/[0.04]
-                   p-3 text-sm text-zinc-100
-                   outline-none focus:ring-4
-                   focus:ring-indigo-500/20"
+        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20 min-h-[160px] overflow-auto"
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
             e.preventDefault();
