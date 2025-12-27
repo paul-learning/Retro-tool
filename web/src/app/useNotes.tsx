@@ -12,6 +12,8 @@ import {
 export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [text, setText] = useState("");
+  const [draft, setDraft] = useState("");
+  const [activeId, setActiveId] = useState<string | null>(null);
 
   // EDIT STATE
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -88,22 +90,55 @@ export function useNotes() {
     setEditingText("");
     await loadNotes();
   }, [editingId, editingText, loadNotes]);
+  const startCreate = useCallback(() => {
+  setActiveId(null);
+  setDraft("");
+}, []);
 
-  return {
-    notes,
-    text,
-    setText,
-    addNote,
-    deleteNote,
+const startEditModal = useCallback((note: Note) => {
+  setActiveId(note.id);
+  setDraft(note.text);
+}, []);
 
-    // editing API
-    editingId,
-    editingText,
-    setEditingText,
-    startEdit,
-    focusEditor,
-    cancelEdit,
-    commitEdit,
-    editorRef,
-  };
+const commitDraft = useCallback(async () => {
+  const value = draft.trim();
+  if (!value) return;
+
+  if (activeId) {
+    await updateLocalNote(activeId, value);
+  } else {
+    await addLocalNote(value);
+  }
+
+  setDraft("");
+  setActiveId(null);
+  await loadNotes();
+}, [draft, activeId, loadNotes]);
+
+return {
+  notes,
+  deleteNote,
+
+  // modal draft API
+  draft,
+  setDraft,
+  activeId,
+  startCreate,
+  startEditModal,
+  commitDraft,
+
+  // (optional) legacy - kannst du drin lassen oder später entfernen
+  text,
+  setText,
+  addNote,
+  editingId,
+  editingText,
+  setEditingText,
+  startEdit,
+  focusEditor,
+  cancelEdit,
+  commitEdit,
+  editorRef,
+};
+
 }
