@@ -5,42 +5,54 @@ import { useNotes } from "./useNotes";
 import { useEffect, useRef, useState } from "react";
 import { UI } from "./uiStrings";
 
-function ClampedText({
-  text,
-}: {
-  text: string;
-}) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [clamped, setClamped] = useState(false);
+function ClampedBody({ text }: { text: string }) {
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const [isClamped, setIsClamped] = useState(false);
 
   useEffect(() => {
-    const el = ref.current;
+    const el = boxRef.current;
     if (!el) return;
 
-    // If content overflows, it was clamped
-    setClamped(el.scrollHeight > el.clientHeight);
+    const measure = () => setIsClamped(el.scrollHeight > el.clientHeight + 1);
+
+    requestAnimationFrame(measure);
+
+    const ro = new ResizeObserver(() => requestAnimationFrame(measure));
+    ro.observe(el);
+
+    // @ts-ignore
+    document.fonts?.ready?.then(() => requestAnimationFrame(measure));
+
+    return () => ro.disconnect();
   }, [text]);
 
   return (
-    <div className="relative">
+    <div className="relative h-full min-h-0">
       <div
-        ref={ref}
-        className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/90 line-clamp-6"
+        ref={boxRef}
+        className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/80"
+        style={{
+          maxHeight: "calc(1.625em * 6)", // 6 lines
+          overflow: "hidden",
+        }}
       >
         {text}
       </div>
 
-      {clamped && (
+      {isClamped && (
         <>
           <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#0B0D12] to-transparent" />
-          <div className="pointer-events-none absolute bottom-1 right-2 text-xs text-zinc-400">
-            {UI.moreText}
+          <div className="pointer-events-none absolute bottom-2 right-2 z-30 text-s text-zinc-400">
+            {UI.moreText /* "..." */}
           </div>
         </>
       )}
     </div>
   );
 }
+
+
+
 
 
 export default function Page() {
@@ -69,8 +81,8 @@ useEffect(() => {
 
   // cap to viewport (match your modal max: 100vh - 8rem, minus padding/header feel)
   const max = window.innerHeight - 8 * 16; // 8rem
-  el.style.height = Math.min(el.scrollHeight, max - 32)-1 + "px";
-}, [modalOpen, draft]);
+  el.style.height = Math.min(el.scrollHeight, max - 32) - 1 + "px";
+}, [modalOpen, draft.text]);
 
 
   const [menu, setMenu] = useState<{
@@ -140,12 +152,14 @@ function openMenu(e: React.MouseEvent, noteId: string) {
                 onContextMenu={(e) => openMenu(e, note.id)}
                 className="group cursor-text rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_14px_50px_rgba(0,0,0,0.35)] transition hover:border-white/15 hover:bg-white/[0.06] h-48 flex flex-col"
               >
-                <div className="p-4 flex-1 overflow-hidden">
-                  <ClampedText text={note.text} />
+                <div className="px-4 pt-4 pb-2 overflow-hidden font-semibold text-zinc-100">
+                  {note.title || UI.untitled}
+                </div>
+                <div className="px-4 pb-3 flex-1 min-h-0 overflow-hidden text-zinc-100/90">
+                  <ClampedBody text={note.text} />
                 </div>
 
-
-                <div className="flex items-center justify-between 0 px-1 py-1">
+                <div className="flex items-center justify-between px-2 py-2">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -265,21 +279,27 @@ function openMenu(e: React.MouseEvent, noteId: string) {
       className="mt-24 w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col max-h-[calc(100vh-8rem)] overflow-hidden"
       onMouseDown={(e) => e.stopPropagation()}
     >
+      <input
+        value={draft.title}
+        onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+        placeholder={UI.titlePlaceholder ?? "Title"}
+        className="w-full rounded-xl border border-white/10 bg-white/[0.04]
+                  px-3 py-2 text-sm text-zinc-100 outline-none
+                  focus:ring-4 focus:ring-indigo-500/20"
+      />
       <textarea
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
+        value={draft.text}
+        onChange={(e) => setDraft((d) => ({ ...d, text: e.target.value }))}
+        placeholder={UI.bodyPlaceholder}
         ref={taRef}
-        autoFocus
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20 min-h-[160px] overflow-y-auto overflow-x-hidden modal-scroll"
+        className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20 min-h-[160px] overflow-y-auto overflow-x-hidden"
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
             e.preventDefault();
             commitDraft();
             setModalOpen(false);
           }
-          if (e.key === "Escape") {
-            setModalOpen(false);
-          }
+          if (e.key === "Escape") setModalOpen(false);
         }}
       />
     </div>

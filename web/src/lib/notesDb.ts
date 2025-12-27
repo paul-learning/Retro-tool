@@ -1,5 +1,6 @@
 export type Note = {
   id: string;
+  title: string;
   text: string;
   createdAt: number;
   updatedAt: number;
@@ -64,10 +65,11 @@ export async function listNotes(): Promise<Note[]> {
   });
 }
 
-export async function addNote(text: string): Promise<Note> {
+export async function addNote(title: string, text: string): Promise<Note> {
   const now = Date.now();
   const note: Note = {
     id: crypto.randomUUID(),
+    title,
     text,
     createdAt: now,
     updatedAt: now,
@@ -77,25 +79,23 @@ export async function addNote(text: string): Promise<Note> {
   await tx(db, "readwrite", (store) => store.put(note));
   return note;
 }
-export async function updateNote(id: string, text: string): Promise<void> {
+
+export async function updateNote(id: string, title: string, text: string): Promise<void> {
   const db = await openDb();
   const now = Date.now();
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction("notes", "readwrite");
     const store = transaction.objectStore("notes");
-
     const getReq = store.get(id);
 
     getReq.onsuccess = () => {
       const existing = getReq.result as Note | undefined;
-      if (!existing) {
-        resolve();
-        return;
-      }
+      if (!existing) return resolve();
 
       const updated: Note = {
         ...existing,
+        title,
         text,
         updatedAt: now,
       };
@@ -104,12 +104,12 @@ export async function updateNote(id: string, text: string): Promise<void> {
     };
 
     getReq.onerror = () => reject(getReq.error);
-
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
   });
 }
+
 
 export async function deleteNote(id: string): Promise<void> {
   const db = await openDb();
