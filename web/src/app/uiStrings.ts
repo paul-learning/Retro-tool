@@ -17,6 +17,9 @@ export const UI = {
   cancel: "Cancel",
   confirmDeleteBody: "Are you sure you want to delete this note? This action cannot be undone.",
   confirmDeleteTitle: "Confirm Delete",
+  titlePlaceholder: "Title",
+    bodyPlaceholder: "Write your note here...",
   moreText: "...",
-  notesCount: (n: number) => `${n} notes`,
+    untitled: "Untitled",
+  notesCount: (n: number) => n === 1 ? "1 note" : `${n} notes`,
 } as const;
