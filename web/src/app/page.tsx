@@ -66,12 +66,12 @@ const {
   startEditModal,
   commitDraft,
 } = useNotes();
-
+  
   const [modalOpen, setModalOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-
-useEffect(() => {
+  
+  useEffect(() => {
   if (!modalOpen) return;
   const el = taRef.current;
   if (!el) return;
@@ -84,7 +84,6 @@ useEffect(() => {
   el.style.height = Math.min(el.scrollHeight, max - 32) - 1 + "px";
 }, [modalOpen, draft.text]);
 
-
   const [menu, setMenu] = useState<{
   open: boolean;
   x: number;
@@ -92,9 +91,10 @@ useEffect(() => {
   noteId: string | null;
 }>({ open: false, x: 0, y: 0, noteId: null });
 const confirmRef = useRef<HTMLDivElement | null>(null);
+const deleteBtnRef = useRef<HTMLButtonElement | null>(null);
 
 useEffect(() => {
-  if (confirmDeleteId) confirmRef.current?.focus();
+  if (confirmDeleteId) deleteBtnRef.current?.focus();
 }, [confirmDeleteId]);
 
 function closeMenu() {
@@ -334,6 +334,7 @@ function openMenu(e: React.MouseEvent, noteId: string) {
         </button>
 
         <button
+          ref={deleteBtnRef}
           className="rounded-xl border border-white/10 bg-red-500/90 px-3 py-2 text-sm font-semibold text-white hover:bg-red-500"
           onClick={() => {
             deleteNote(confirmDeleteId);
