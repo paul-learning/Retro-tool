@@ -69,7 +69,7 @@ useEffect(() => {
 
   // cap to viewport (match your modal max: 100vh - 8rem, minus padding/header feel)
   const max = window.innerHeight - 8 * 16; // 8rem
-  el.style.height = Math.min(el.scrollHeight, max - 32 /*modal padding*/ ) + "px";
+  el.style.height = Math.min(el.scrollHeight, max - 32)-1 + "px";
 }, [modalOpen, draft]);
 
 
@@ -262,7 +262,7 @@ function openMenu(e: React.MouseEvent, noteId: string) {
     }}
   >
     <div
-      className="mt-24 w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col max-h-[calc(100vh-8rem)]"
+      className="mt-24 w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col max-h-[calc(100vh-8rem)] overflow-hidden"
       onMouseDown={(e) => e.stopPropagation()}
     >
       <textarea
@@ -270,7 +270,7 @@ function openMenu(e: React.MouseEvent, noteId: string) {
         onChange={(e) => setDraft(e.target.value)}
         ref={taRef}
         autoFocus
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20 min-h-[160px] overflow-auto"
+        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20 min-h-[160px] overflow-y-auto overflow-x-hidden modal-scroll"
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
             e.preventDefault();
