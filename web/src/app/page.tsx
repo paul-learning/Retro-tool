@@ -98,10 +98,17 @@ function openMenu(e: React.MouseEvent, noteId: string) {
                 className="group cursor-text rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_14px_50px_rgba(0,0,0,0.35)] transition hover:border-white/15 hover:bg-white/[0.06]"
 >
                 <div className="p-4">
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/90">
-                    {note.text}
-                  </div>
+                  <div className="relative">
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/90 line-clamp-6">
+                      {note.text}
+                    </div>
 
+                    {/* fade + indicator */}
+                    <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-[#0B0D12] to-transparent" />
+                    <div className="pointer-events-none absolute bottom-1 right-2 text-xs text-zinc-400">
+                      
+                    </div>
+                  </div>
                 </div>
 
 
