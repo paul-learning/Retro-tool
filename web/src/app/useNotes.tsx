@@ -13,6 +13,7 @@ export function useNotes() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [draft, setDraft] = useState("");
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [draftOriginal, setDraftOriginal] = useState("");
 
 
   const loadNotes = useCallback(async () => {
@@ -31,15 +32,24 @@ export function useNotes() {
   const startCreate = useCallback(() => {
   setActiveId(null);
   setDraft("");
+  setDraftOriginal("");
 }, []);
 
 const startEditModal = useCallback((note: Note) => {
   setActiveId(note.id);
   setDraft(note.text);
+  setDraftOriginal(note.text);
 }, []);
 
 const commitDraft = useCallback(async () => {
   const value = draft.trim();
+  // If editing and nothing changed: close/reset without DB write or reload
+  if (activeId && value === draftOriginal.trim()) {
+    setDraft("");
+    setDraftOriginal("");
+    setActiveId(null);
+    return;
+  }
   if (!value) return;
 
   if (activeId) {
@@ -49,6 +59,7 @@ const commitDraft = useCallback(async () => {
   }
 
   setDraft("");
+  setDraftOriginal("");
   setActiveId(null);
   await loadNotes();
 }, [draft, activeId, loadNotes]);
