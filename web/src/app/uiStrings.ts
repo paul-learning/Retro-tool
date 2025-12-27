@@ -13,5 +13,6 @@ export const UI = {
 
   titleEdit: "Edit",
   titleDelete: "Delete",
+  moreText: "...",
   notesCount: (n: number) => `${n} notes`,
 } as const;
