@@ -7,21 +7,18 @@ import { useEffect, useState } from "react";
 
 
 export default function Page() {
-  const {
-    notes,
-    text,
-    setText,
-    addNote,
-    deleteNote,
-    editingId,
-    editingText,
-    setEditingText,
-    startEdit,
-    focusEditor,
-    commitEdit,
-    cancelEdit, 
-    editorRef,
-  } = useNotes();
+const {
+  notes,
+  deleteNote,
+
+  draft,
+  setDraft,
+  startCreate,
+  startEditModal,
+  commitDraft,
+} = useNotes();
+
+  const [modalOpen, setModalOpen] = useState(false);
 
   const [menu, setMenu] = useState<{
   open: boolean;
@@ -79,59 +76,26 @@ function openMenu(e: React.MouseEvent, noteId: string) {
               <article
                 key={note.id}
                 onClick={() => {
-                  startEdit(note);
-                  focusEditor();
+                  startEditModal(note);
+                  setModalOpen(true);
                 }}
                 onContextMenu={(e) => openMenu(e, note.id)}
                 className="group cursor-text rounded-2xl border border-white/10 bg-white/[0.04] shadow-[0_14px_50px_rgba(0,0,0,0.35)] transition hover:border-white/15 hover:bg-white/[0.06]"
 >
                 <div className="p-4">
-                  {editingId === note.id ? (
-                    <textarea
-                      ref={editorRef}
-                      value={editingText}
-                      onChange={(e) => setEditingText(e.target.value)}
-                      rows={3}
-                      className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm leading-relaxed text-zinc-100/90 outline-none transition focus:border-indigo-400/40 focus:ring-4 focus:ring-indigo-500/10"
-                      onClick={(e) => e.stopPropagation()}
-                      onContextMenu={(e) => {
-                        // allow context menu even while editing
-                        e.stopPropagation();
-                        openMenu(e, note.id);
-                      }}
-                      onKeyDown={(e) => {
-                        // Save on Ctrl/Cmd+Enter
-                        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                          e.preventDefault();
-                          commitEdit();
-                          return;
-                        }
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/90">
+                    {note.text}
+                  </div>
 
-                        // Stop editing on Escape (no save)
-                        if (e.key === "Escape") {
-                          e.preventDefault();
-                          cancelEdit();
-                          return;
-                        }
-                      }}
-                      onBlur={() => {
-                        // Save when leaving the field
-                        commitEdit();
-                      }}
-                    />
-                  ) : (
-                    <div className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/90">
-                      {note.text}
-                    </div>
-                  )}
                 </div>
 
 
                 <div className="flex items-center justify-between 0 px-1 py-1">
                   <button
-                    onClick={() => {
-                      startEdit(note);
-                      focusEditor();
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEditModal(note);
+                      setModalOpen(true);
                     }}
                     aria-label="Edit note"
                     title="Edit"
@@ -181,72 +145,7 @@ function openMenu(e: React.MouseEvent, noteId: string) {
           </div>
         )}
       </section>
-
-      {/* composer */}
-      <footer className="fixed bottom-0 left-0 right-0 border-t border-white/10 bg-[#0B0D12]/75 backdrop-blur-xl">
-        <div className="mx-auto flex w-full max-w-5xl items-end gap-3 px-5 py-3">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder="Write a note…"
-            rows={1}
-            className="max-h-40 flex-1 resize-none rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-zinc-100 placeholder:text-zinc-500 shadow-[0_14px_50px_rgba(0,0,0,0.30)] outline-none transition focus:border-indigo-400/40 focus:ring-4 focus:ring-indigo-500/10"
-            onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                e.preventDefault();
-                addNote();
-              }
-            }}
-          />
-          <button
-            onClick={addNote}
-            disabled={!text.trim()}
-            className="h-[46px] shrink-0 rounded-2xl border border-white/10 bg-gradient-to-b from-indigo-500/95 to-indigo-600/95 px-4 text-sm font-semibold text-white shadow-[0_18px_60px_rgba(0,0,0,0.35)] transition hover:from-indigo-400/95 hover:to-indigo-600/95 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-4 focus:ring-indigo-500/20"
-          >
-            Add
-          </button>
-        </div>
-      </footer>
-      {menu.open && menu.noteId && (
-  <div
-    className="fixed inset-0 z-50"
-    onMouseDown={(e) => {
-      // click outside closes
-      e.stopPropagation();
-      closeMenu();
-    }}
-  >
-    <div
-      className="absolute min-w-[160px] rounded-xl border border-white/10 bg-[#0B0D12]/95 p-1 text-sm text-zinc-200 shadow-[0_18px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl"
-      style={{ left: menu.x, top: menu.y }}
-      onMouseDown={(e) => e.stopPropagation()} // don't close when clicking menu itself
-    >
-      <button
-        className="w-full rounded-lg px-3 py-2 text-left hover:bg-white/5"
-        onClick={() => {
-          const n = notes.find((n) => n.id === menu.noteId);
-          if (n) {
-            startEdit(n);
-            focusEditor();
-          }
-          closeMenu();
-        }}
-      >
-        Edit
-      </button>
-
-      <button
-        className="w-full rounded-lg px-3 py-2 text-left text-red-300 hover:bg-white/5"
-        onClick={() => {
-          deleteNote(menu.noteId!);
-          closeMenu();
-        }}
-      >
-        Delete
-      </button>
-    </div>
-  </div>
-)}
+      
   {menu.open && menu.noteId && (
     <div
       className="fixed inset-0 z-50"
@@ -266,8 +165,8 @@ function openMenu(e: React.MouseEvent, noteId: string) {
           onClick={() => {
             const n = notes.find((n) => n.id === menu.noteId);
             if (n) {
-              startEdit(n);
-              focusEditor();
+              startEditModal(n);
+              setModalOpen(true);
             }
             closeMenu();
           }}
@@ -287,6 +186,55 @@ function openMenu(e: React.MouseEvent, noteId: string) {
       </div>
     </div>
   )}
+  <button
+      onClick={() => {
+        startCreate();
+        setModalOpen(true);
+      }}
+  className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full bg-indigo-600 text-white text-3xl shadow-xl transition hover:bg-indigo-500"
+
+    >
+      +
+  </button>
+      {modalOpen && (
+  <div
+    className="fixed inset-0 z-50 flex items-start justify-center
+               bg-black/50 backdrop-blur-sm"
+    onMouseDown={() => {
+      commitDraft();
+      setModalOpen(false);
+    }}
+  >
+    <div
+      className="mt-24 w-full max-w-xl rounded-2xl
+                 border border-white/10 bg-[#0B0D12]
+                 p-4 shadow-2xl"
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={6}
+        autoFocus
+        className="w-full resize-none rounded-xl
+                   border border-white/10 bg-white/[0.04]
+                   p-3 text-sm text-zinc-100
+                   outline-none focus:ring-4
+                   focus:ring-indigo-500/20"
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            e.preventDefault();
+            commitDraft();
+            setModalOpen(false);
+          }
+          if (e.key === "Escape") {
+            setModalOpen(false);
+          }
+        }}
+      />
+    </div>
+  </div>
+)}
 
     </main>
   );
