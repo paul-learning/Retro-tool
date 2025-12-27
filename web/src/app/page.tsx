@@ -4,6 +4,8 @@ import { Pencil, Trash2, Plus } from "lucide-react";
 import { useNotes } from "./useNotes";
 import { useEffect, useRef, useState } from "react";
 import { UI } from "./uiStrings";
+import Image from "next/image";
+
 
 function ClampedBody({ text }: { text: string }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
@@ -115,19 +117,28 @@ function openMenu(e: React.MouseEvent, noteId: string) {
       </div>
 
       {/* header */}
-      <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0B0D12]/70 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-5">
-          <div>
-            <h1 className="text-lg font-semibold tracking-[-0.02em]">
-              {UI.headerTitle}
-            </h1>
-            <p className="mt-1 text-xs text-zinc-400">{UI.notesCount(notes.length)}</p>
+        <header className="sticky top-0 z-10 border-b border-white/10 bg-[#0B0D12]/70 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-5">
+            <div className="flex items-center gap-3">
+
+
+
+              <div>
+                <h1 className="text-lg font-semibold tracking-[-0.02em]">
+                  {UI.headerTitle}
+                </h1>
+                <p className="mt-1 text-xs text-zinc-400">
+                  {UI.notesCount(notes.length)}
+                </p>
+              </div>
+            </div>
+
+            <span className="hidden sm:inline rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
+              {UI.keyboardHint}
+            </span>
           </div>
-          <span className="hidden sm:inline rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
-            {UI.keyboardHint}
-          </span>
-        </div>
-      </header>
+        </header>
+
 
       {/* notes */}
       <section className="mx-auto w-full max-w-5xl px-5 pb-28 pt-5">
@@ -347,6 +358,20 @@ function openMenu(e: React.MouseEvent, noteId: string) {
     </div>
   </div>
 )}
+<footer className="fixed bottom-0 left-0 right-0 z-10 border-t border-white/10 bg-[#0B0D12]/70 backdrop-blur-xl">
+  <div className="flex h-16 items-center justify-center">
+    <div className="overflow-hidden flex items-center justify-center">
+      <Image
+        src="/notes-logo-tmp.png"
+        alt="App logo"
+        width={100}
+        height={100}
+        priority
+        className="invert scale-[1.8]"
+      />
+    </div>
+  </div>
+</footer>
 
     </main>
   );
