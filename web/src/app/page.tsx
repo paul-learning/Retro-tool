@@ -2,7 +2,7 @@
 
 import { Pencil, Trash2 } from "lucide-react";
 import { useNotes } from "./useNotes";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 
 
