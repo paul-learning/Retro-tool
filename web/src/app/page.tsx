@@ -3,6 +3,8 @@
 import { Pencil, Trash2, Plus } from "lucide-react";
 import { useNotes } from "./useNotes";
 import { useEffect, useRef, useState } from "react";
+import { UI } from "./uiStrings";
+
 
 export default function Page() {
 const {
@@ -62,12 +64,12 @@ function openMenu(e: React.MouseEvent, noteId: string) {
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-5">
           <div>
             <h1 className="text-lg font-semibold tracking-[-0.02em]">
-              Your Notes
+              {UI.headerTitle}
             </h1>
-            <p className="mt-1 text-xs text-zinc-400">{notes.length} notes</p>
+            <p className="mt-1 text-xs text-zinc-400">{UI.notesCount(notes.length)}</p>
           </div>
           <span className="hidden sm:inline rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-zinc-300">
-            ⌘/Ctrl + Enter
+            {UI.keyboardHint}
           </span>
         </div>
       </header>
@@ -77,9 +79,9 @@ function openMenu(e: React.MouseEvent, noteId: string) {
         {notes.length === 0 ? (
           <div className="grid place-items-center py-24">
             <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
-              <div className="text-sm font-semibold">No notes yet</div>
+              <div className="text-sm font-semibold">{UI.emptyStateTitle}</div>
               <p className="mt-2 text-xs leading-relaxed text-zinc-400">
-                Add your first note below.
+                {UI.emptyStateBody}
               </p>
             </div>
           </div>
@@ -110,8 +112,8 @@ function openMenu(e: React.MouseEvent, noteId: string) {
                       startEditModal(note);
                       setModalOpen(true);
                     }}
-                    aria-label="Edit note"
-                    title="Edit"
+                    aria-label={UI.ariaEditNote}
+                    title={UI.titleEdit}
                     className="
                       inline-flex items-center justify-center
                       rounded-lg
@@ -132,8 +134,8 @@ function openMenu(e: React.MouseEvent, noteId: string) {
 
                   <button
                     onClick={() => deleteNote(note.id)}
-                    aria-label="Delete note"
-                    title="Delete"
+                    aria-label={UI.ariaDeleteNote}
+                    title={UI.titleDelete}
                     className="
                       inline-flex items-center justify-center
                       rounded-lg
@@ -184,7 +186,7 @@ function openMenu(e: React.MouseEvent, noteId: string) {
             closeMenu();
           }}
         >
-          Edit
+          {UI.menuEdit}
         </button>
 
         <button
