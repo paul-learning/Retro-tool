@@ -57,6 +57,7 @@ const {
 
   const [modalOpen, setModalOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
 useEffect(() => {
   if (!modalOpen) return;
@@ -78,6 +79,11 @@ useEffect(() => {
   y: number;
   noteId: string | null;
 }>({ open: false, x: 0, y: 0, noteId: null });
+const confirmRef = useRef<HTMLDivElement | null>(null);
+
+useEffect(() => {
+  if (confirmDeleteId) confirmRef.current?.focus();
+}, [confirmDeleteId]);
 
 function closeMenu() {
   setMenu((m) => ({ ...m, open: false, noteId: null }));
@@ -167,7 +173,10 @@ function openMenu(e: React.MouseEvent, noteId: string) {
                   </button>
 
                   <button
-                    onClick={() => deleteNote(note.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setConfirmDeleteId(note.id);
+                    }}
                     aria-label={UI.ariaDeleteNote}
                     title={UI.titleDelete}
                     className="
@@ -226,7 +235,7 @@ function openMenu(e: React.MouseEvent, noteId: string) {
         <button
           className="w-full rounded-lg px-3 py-2 text-left text-red-300 hover:bg-white/5"
           onClick={() => {
-            deleteNote(menu.noteId!);
+            setConfirmDeleteId(menu.noteId!);
             closeMenu();
           }}
         >
@@ -273,6 +282,47 @@ function openMenu(e: React.MouseEvent, noteId: string) {
           }
         }}
       />
+    </div>
+  </div>
+)}
+{confirmDeleteId && (
+  <div
+    ref={confirmRef}
+    tabIndex={-1}
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+    onMouseDown={() => setConfirmDeleteId(null)}
+    onKeyDown={(e) => {
+      if (e.key === "Escape") setConfirmDeleteId(null);
+    }}
+    
+  >
+    <div
+      className="w-[92vw] max-w-sm rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl"
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className="text-sm font-semibold">{UI.confirmDeleteTitle}</div>
+      <p className="mt-2 text-xs text-zinc-400">
+        {UI.confirmDeleteBody}
+      </p>
+
+      <div className="mt-4 flex justify-end gap-2">
+        <button
+          className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06]"
+          onClick={() => setConfirmDeleteId(null)}
+        >
+          {UI.cancel}
+        </button>
+
+        <button
+          className="rounded-xl border border-white/10 bg-red-500/90 px-3 py-2 text-sm font-semibold text-white hover:bg-red-500"
+          onClick={() => {
+            deleteNote(confirmDeleteId);
+            setConfirmDeleteId(null);
+          }}
+        >
+          {UI.delete}
+        </button>
+      </div>
     </div>
   </div>
 )}
