@@ -40,7 +40,7 @@ export function ClampedBody({ text }: { text: string }) {
       {isClamped && (
         <>
           <div className="pointer-events-none absolute bottom-0 right-0 h-10 bg-gradient-to-t from-[#0B0D12] to-transparent" />
-          <div className="pointer-events-none absolute bottom-0 right-2 z-30 text-s text-zinc-400">
+          <div className="pointer-events-none absolute bottom-0 right-2 z-30 text-xl text-zinc-400">
             {UI.moreText /* "..." */}
           </div>
         </>

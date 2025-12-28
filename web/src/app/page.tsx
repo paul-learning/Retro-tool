@@ -13,13 +13,21 @@ import { Fab } from "./components/Fab";
 import { AppFooter } from "./components/AppFooter";
 
 export default function Page() {
-  const { notes, deleteNote, draft, setDraft, startCreate, startEditModal, commitDraft } =
+  const { notes, deleteNote, draft, setDraft, activeId, startCreate, startEditModal, commitDraft } =
     useNotes();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-
+  const [activeMeta, setActiveMeta] = useState<{ createdAt: number; updatedAt: number } | null>(null);
   const { menu, closeMenu, openMenu } = useContextMenu();
+  const handleCommit = async () => {
+    await commitDraft();
+
+    // If we were editing an existing note, update the modal meta timestamp
+    if (activeId && activeMeta) {
+      setActiveMeta({ ...activeMeta, updatedAt: Date.now() });
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#0B0D12] text-zinc-100">
@@ -49,12 +57,14 @@ export default function Page() {
                 note={note}
                 onOpen={() => {
                   startEditModal(note);
+                  setActiveMeta({ createdAt: note.createdAt, updatedAt: note.updatedAt });
                   setModalOpen(true);
                 }}
                 onContextMenu={(e) => openMenu(e, note.id)}
                 onEditClick={(e) => {
                   e.stopPropagation();
                   startEditModal(note);
+                  setActiveMeta({ createdAt: note.createdAt, updatedAt: note.updatedAt });
                   setModalOpen(true);
                 }}
                 onAskDelete={(e) => {
@@ -75,6 +85,7 @@ export default function Page() {
             const n = notes.find((n) => n.id === menu.noteId);
             if (n) {
               startEditModal(n);
+              setActiveMeta({ createdAt: n.createdAt, updatedAt: n.updatedAt });
               setModalOpen(true);
             }
           }}
@@ -87,6 +98,7 @@ export default function Page() {
       <Fab
         onClick={() => {
           startCreate();
+          setActiveMeta(null);
           setModalOpen(true);
         }}
       />
@@ -95,8 +107,9 @@ export default function Page() {
         open={modalOpen}
         draft={draft}
         setDraft={setDraft}
-        onCommit={commitDraft}
+        onCommit={handleCommit}
         onClose={() => setModalOpen(false)}
+        meta={activeMeta}
       />
 
       <ConfirmDeleteDialog

@@ -4,19 +4,32 @@ import { useEffect, useRef, useState } from "react";
 import { UI } from "../uiStrings";
 import { useAutosizeTextarea } from "../hooks/useAutosizeTextarea";
 
+function fmt(ts: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(ts));
+}
+
 export function EditNoteModal({
   open,
   draft,
   setDraft,
   onCommit,
   onClose,
+  meta,
 }: {
   open: boolean;
   draft: { title: string; text: string };
   setDraft: React.Dispatch<React.SetStateAction<{ title: string; text: string }>>;
   onCommit: () => void;
   onClose: () => void;
+  meta: { createdAt: number; updatedAt: number } | null;
 }) {
+
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   const [originalDraft, setOriginalDraft] = useState<{ title: string; text: string } | null>(null);
 
@@ -101,6 +114,16 @@ useEffect(() => {
                 if (e.key === "Escape") onClose();
             }}
         />
+        {meta && (
+            <div className="mt-3 text-[11px] text-zinc-400 flex justify-end">
+                                <span>
+                    {meta.updatedAt === meta.createdAt
+                        ? `Created ${fmt(meta.createdAt)}`
+                        : `Edited ${fmt(meta.updatedAt)}`}
+                </span>
+            </div>
+            )}
+
         <div className="mt-4 flex items-center justify-between">
             {/* Cancel */}
             <button
@@ -123,7 +146,7 @@ useEffect(() => {
                 : "inline-flex items-center gap-2 rounded-xl bg-white/[0.08] px-4 py-2 text-sm font-semibold text-zinc-400 cursor-not-allowed"
             }
             >
-            ✓ {UI.save ?? "Save"}
+            ✓ {UI.save}
             </button>
 
             </div>
