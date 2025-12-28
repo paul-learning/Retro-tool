@@ -12,25 +12,56 @@ import { ConfirmDeleteDialog } from "./components/ConfirmDeleteDialog";
 import { Fab } from "./components/Fab";
 import { AppFooter } from "./components/AppFooter";
 
+import { useVault } from "./useVault";
+import { VaultModal } from "./components/VaultModal";
+
 export default function Page() {
+  const vault = useVault();
   const { notes, deleteNote, draft, setDraft, activeId, startCreate, startEditModal, commitDraft } =
-    useNotes();
+    useNotes(vault.vaultKey);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [activeMeta, setActiveMeta] = useState<{ createdAt: number; updatedAt: number } | null>(null);
   const { menu, closeMenu, openMenu } = useContextMenu();
+  const [forceVaultUi, setForceVaultUi] = useState(false);
+  const [setupFlow, setSetupFlow] = useState(false);
+
   const handleCommit = async () => {
     await commitDraft();
-
-    // If we were editing an existing note, update the modal meta timestamp
     if (activeId && activeMeta) {
       setActiveMeta({ ...activeMeta, updatedAt: Date.now() });
     }
   };
 
+  const needsVaultUi =
+    forceVaultUi ||
+    setupFlow ||
+    vault.status === "needs-setup" ||
+    vault.status === "locked";
+
+
   return (
     <main className="min-h-screen bg-[#0B0D12] text-zinc-100">
+      {/* vault gate */}
+      {needsVaultUi && (
+        <VaultModal
+          mode={setupFlow || vault.status === "needs-setup" ? "setup" : "unlock"}
+          onSetup={async (passphrase) => {
+            setSetupFlow(true);            // keep mode="setup"
+            const res = await vault.setupVault(passphrase);
+            setForceVaultUi(true);         // keep modal mounted for recovery screen
+            return res;
+          }}
+          onUnlockPassphrase={vault.unlockWithPassphrase}
+          onUnlockRecovery={vault.unlockWithRecoveryKey}
+          onRecoveryDone={() => {
+            setForceVaultUi(false);
+            setSetupFlow(false);           // now allow normal "unlock" mode logic
+          }}
+        />
+      )}
+
       {/* subtle glow */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute left-[10%] top-[-160px] h-[520px] w-[520px] rounded-full bg-indigo-500/10 blur-3xl" />
@@ -38,8 +69,7 @@ export default function Page() {
       </div>
 
       <NotesHeader count={notes.length} />
-
-      <section className="mx-auto max-w-5xl px-5 pb-24 pt-6">
+ <section className="mx-auto max-w-5xl px-5 pb-24 pt-6">
         {notes.length === 0 ? (
           <div className="grid place-items-center py-24">
             <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
@@ -123,6 +153,7 @@ export default function Page() {
       />
 
       <AppFooter />
+
     </main>
   );
 }
