@@ -42,13 +42,7 @@ export function NoteCard({
       <div className="px-4 pb-3 flex-1 min-h-0 overflow-hidden text-zinc-100/90">
         <ClampedBody text={note.text} />
       </div>
-    <div className="px-4 -mt-1 pb-2 text-[11px] text-zinc-400 flex justify-end">
-    <span>
-        {note.updatedAt === note.createdAt
-        ? `Created ${fmt(note.createdAt)}`
-        : `Edited ${fmt(note.updatedAt)}`}
-    </span>
-    </div>
+
 
       <div className="flex items-center justify-between px-2 py-2">
         <button
@@ -72,7 +66,11 @@ export function NoteCard({
         >
           <Pencil className="h-4 w-4" />
         </button>
-
+        <span className="px-4 text-[11px] leading-4 text-zinc-400">
+        {note.updatedAt === note.createdAt
+            ? `Created ${fmt(note.createdAt)}`
+            : `Edited ${fmt(note.updatedAt)}`}
+        </span>
         <button
           onClick={onAskDelete}
           aria-label={UI.ariaDeleteNote}
