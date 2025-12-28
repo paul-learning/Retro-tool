@@ -1,3 +1,17 @@
+// src/lib/notesDb.ts
+import { openAppDb, idbDelete, idbGetAll, idbPut } from "./idb";
+import {
+  aesGcmDecrypt,
+  aesGcmEncrypt,
+  b64ToBytes,
+  bytesToB64,
+  decryptJson,
+  encryptJson,
+  exportRawKey,
+  generateAesGcmKey,
+  importRawAesGcmKey,
+} from "./crypto";
+
 export type Note = {
   id: string;
   title: string;
@@ -6,112 +20,123 @@ export type Note = {
   updatedAt: number;
 };
 
-// Small helper to open an IndexedDB database
-function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open("retrotool", 1);
+// What is stored in IndexedDB (no plaintext title/text)
+type EncryptedNoteRecordV1 = {
+  id: string;
+  createdAt: number;
+  updatedAt: number;
+  cryptoVersion: 1;
 
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains("notes")) {
-        const store = db.createObjectStore("notes", { keyPath: "id" });
-        store.createIndex("updatedAt", "updatedAt");
-      }
-    };
+  // encrypted payload: { title, text }
+  payloadIvB64: string;
+  payloadCtB64: string;
 
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+  // per-note key wrapped by vault key
+  wrappedNoteKeyIvB64: string;
+  wrappedNoteKeyCtB64: string;
+};
+
+type NotePayload = { title: string; text: string };
+
+function newId(): string {
+  // good enough locally; later you can switch to UUIDv7
+  return crypto.randomUUID();
 }
 
-function tx<T>(
-  db: IDBDatabase,
-  mode: IDBTransactionMode,
-  fn: (store: IDBObjectStore) => IDBRequest<T> | void
-): Promise<T | void> {
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction("notes", mode);
-    const store = transaction.objectStore("notes");
+async function wrapNoteKey(vaultKey: CryptoKey, noteKey: CryptoKey): Promise<{ ivB64: string; ctB64: string }> {
+  const rawNoteKey = await exportRawKey(noteKey);
+  const { iv, ct } = await aesGcmEncrypt(vaultKey, rawNoteKey);
+  return { ivB64: bytesToB64(iv), ctB64: bytesToB64(ct) };
+}
 
-    let request: IDBRequest<T> | undefined;
-    try {
-      const r = fn(store);
-      if (r) request = r as IDBRequest<T>;
-    } catch (e) {
-      reject(e);
-      return;
+async function unwrapNoteKey(vaultKey: CryptoKey, wrappedIvB64: string, wrappedCtB64: string): Promise<CryptoKey> {
+  const iv = b64ToBytes(wrappedIvB64);
+  const ct = b64ToBytes(wrappedCtB64);
+  const raw = await aesGcmDecrypt(vaultKey, iv, ct);
+  return importRawAesGcmKey(raw);
+}
+
+export async function listNotes(vaultKey: CryptoKey): Promise<Note[]> {
+  const db = await openAppDb();
+  try {
+    const rows = await idbGetAll<EncryptedNoteRecordV1>(db, "notes");
+
+    const out: Note[] = [];
+    for (const r of rows) {
+      const noteKey = await unwrapNoteKey(vaultKey, r.wrappedNoteKeyIvB64, r.wrappedNoteKeyCtB64);
+      const payload = await decryptJson<NotePayload>(noteKey, r.payloadIvB64, r.payloadCtB64);
+
+      out.push({
+        id: r.id,
+        title: payload.title ?? "",
+        text: payload.text ?? "",
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+      });
     }
 
-    transaction.oncomplete = () => resolve(request?.result);
-    transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error);
-  });
+    // newest first feels nice
+    out.sort((a, b) => b.updatedAt - a.updatedAt);
+    return out;
+  } finally {
+    db.close();
+  }
 }
 
-export async function listNotes(): Promise<Note[]> {
-  const db = await openDb();
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction("notes", "readonly");
-    const store = transaction.objectStore("notes");
-    const req = store.getAll();
+export async function addNote(vaultKey: CryptoKey, title: string, text: string): Promise<void> {
+  const db = await openAppDb();
+  try {
+    const noteKey = await generateAesGcmKey();
 
-    req.onsuccess = () => {
-      const items = (req.result as Note[]) ?? [];
-      // newest first
-      items.sort((a, b) => b.updatedAt - a.updatedAt);
-      resolve(items);
-    };
-    req.onerror = () => reject(req.error);
-  });
-}
+    const wrapped = await wrapNoteKey(vaultKey, noteKey);
+    const payload = await encryptJson(noteKey, { title, text });
 
-export async function addNote(title: string, text: string): Promise<Note> {
-  const now = Date.now();
-  const note: Note = {
-    id: crypto.randomUUID(),
-    title,
-    text,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  const db = await openDb();
-  await tx(db, "readwrite", (store) => store.put(note));
-  return note;
-}
-
-export async function updateNote(id: string, title: string, text: string): Promise<void> {
-  const db = await openDb();
-  const now = Date.now();
-
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction("notes", "readwrite");
-    const store = transaction.objectStore("notes");
-    const getReq = store.get(id);
-
-    getReq.onsuccess = () => {
-      const existing = getReq.result as Note | undefined;
-      if (!existing) return resolve();
-
-      const updated: Note = {
-        ...existing,
-        title,
-        text,
-        updatedAt: now,
-      };
-
-      store.put(updated);
+    const now = Date.now();
+    const rec: EncryptedNoteRecordV1 = {
+      id: newId(),
+      createdAt: now,
+      updatedAt: now,
+      cryptoVersion: 1,
+      payloadIvB64: payload.ivB64,
+      payloadCtB64: payload.ctB64,
+      wrappedNoteKeyIvB64: wrapped.ivB64,
+      wrappedNoteKeyCtB64: wrapped.ctB64,
     };
 
-    getReq.onerror = () => reject(getReq.error);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error);
-  });
+    await idbPut(db, "notes", rec);
+  } finally {
+    db.close();
+  }
 }
 
+export async function updateNote(vaultKey: CryptoKey, id: string, title: string, text: string): Promise<void> {
+  const db = await openAppDb();
+  try {
+    const rows = await idbGetAll<EncryptedNoteRecordV1>(db, "notes");
+    const existing = rows.find((x) => x.id === id);
+    if (!existing) return;
+
+    const noteKey = await unwrapNoteKey(vaultKey, existing.wrappedNoteKeyIvB64, existing.wrappedNoteKeyCtB64);
+    const payload = await encryptJson(noteKey, { title, text });
+
+    const updated: EncryptedNoteRecordV1 = {
+      ...existing,
+      updatedAt: Date.now(),
+      payloadIvB64: payload.ivB64,
+      payloadCtB64: payload.ctB64,
+    };
+
+    await idbPut(db, "notes", updated);
+  } finally {
+    db.close();
+  }
+}
 
 export async function deleteNote(id: string): Promise<void> {
-  const db = await openDb();
-  await tx(db, "readwrite", (store) => store.delete(id));
+  const db = await openAppDb();
+  try {
+    await idbDelete(db, "notes", id);
+  } finally {
+    db.close();
+  }
 }
