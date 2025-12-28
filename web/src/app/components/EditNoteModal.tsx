@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { UI } from "../uiStrings";
 import { useAutosizeTextarea } from "../hooks/useAutosizeTextarea";
 
@@ -18,6 +18,7 @@ export function EditNoteModal({
   onClose: () => void;
 }) {
   const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const [originalDraft, setOriginalDraft] = useState<{ title: string; text: string } | null>(null);
 
   // Keep autosize: runs when modal opens and text changes
   useAutosizeTextarea(taRef, [open, draft.text]);
@@ -28,6 +29,15 @@ export function EditNoteModal({
     // next tick so it focuses after render
     requestAnimationFrame(() => taRef.current?.focus());
   }, [open]);
+    useEffect(() => {
+    if (!open) return;
+
+    // Snapshot draft when modal opens
+    setOriginalDraft({
+        title: draft.title,
+        text: draft.text,
+    });
+    }, [open]);
 
   // Global Escape handling: works regardless of focus
   useEffect(() => {
@@ -43,6 +53,9 @@ export function EditNoteModal({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [open, onClose]);
+    const isDirty =
+        originalDraft !== null &&
+        (draft.title !== originalDraft.title || draft.text !== originalDraft.text);
 
   if (!open) return null;
 
@@ -50,7 +63,6 @@ export function EditNoteModal({
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm"
       onMouseDown={() => {
-        onCommit();
         onClose();
       }}
     >
@@ -73,15 +85,43 @@ export function EditNoteModal({
           placeholder={UI.bodyPlaceholder}
           ref={taRef}
           className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20 min-h-[160px] overflow-y-auto overflow-x-hidden"
-          onKeyDown={(e) => {
+            onKeyDown={(e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-              e.preventDefault();
-              onCommit();
-              onClose();
+                e.preventDefault();
+                if (!isDirty) return;
+                onCommit();
+                onClose();
             }
             if (e.key === "Escape") onClose();
-          }}
+            }}
         />
+        <div className="mt-4 flex items-center justify-between">
+            {/* Cancel */}
+            <button
+                onClick={onClose}
+                className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06]"
+            >
+                {UI.cancel}
+            </button>
+
+            <button
+            disabled={!isDirty}
+            onClick={() => {
+                if (!isDirty) return;
+                onCommit();
+                onClose();
+            }}
+            className={
+                isDirty
+                ? "inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                : "inline-flex items-center gap-2 rounded-xl bg-white/[0.08] px-4 py-2 text-sm font-semibold text-zinc-400 cursor-not-allowed"
+            }
+            >
+            ✓ {UI.save ?? "Save"}
+            </button>
+
+            </div>
+
       </div>
     </div>
   );

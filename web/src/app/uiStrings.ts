@@ -15,6 +15,7 @@ export const UI = {
   titleDelete: "Delete",
   delete: "Delete",
   cancel: "Cancel",
+  save: "Save",
   confirmDeleteBody: "Are you sure you want to delete this note? This action cannot be undone.",
   confirmDeleteTitle: "Confirm Delete",
   titlePlaceholder: "Title",
