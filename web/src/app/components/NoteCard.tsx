@@ -5,6 +5,16 @@ import { Pencil, Trash2 } from "lucide-react";
 import { UI } from "../uiStrings";
 import { ClampedBody } from "./ClampedBody";
 
+function fmt(ts: number) {
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(ts));
+}
+
 export function NoteCard({
   note,
   onOpen,
@@ -32,6 +42,13 @@ export function NoteCard({
       <div className="px-4 pb-3 flex-1 min-h-0 overflow-hidden text-zinc-100/90">
         <ClampedBody text={note.text} />
       </div>
+    <div className="px-4 -mt-1 pb-2 text-[11px] text-zinc-400 flex justify-end">
+    <span>
+        {note.updatedAt === note.createdAt
+        ? `Created ${fmt(note.createdAt)}`
+        : `Edited ${fmt(note.updatedAt)}`}
+    </span>
+    </div>
 
       <div className="flex items-center justify-between px-2 py-2">
         <button
