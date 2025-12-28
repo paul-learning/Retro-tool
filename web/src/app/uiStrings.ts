@@ -33,6 +33,7 @@ export const UI = {
   passphraseMinimumHint: "Passphrase should be at least 8 characters.",
   unlockVaultPrompt: "Unlock your vault",
   createVaultPrompt: "Create your vault",
+  ariaLabelFab: "Create note",
   previewMode: "Preview Mode",
   editMode: "Edit Mode",
   preview: "Preview",

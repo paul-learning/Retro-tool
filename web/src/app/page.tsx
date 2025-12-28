@@ -126,12 +126,14 @@ export default function Page() {
       </section>
 
       <Fab
+        ariaLabel= {UI.ariaLabelFab}
         onClick={() => {
           startCreate();
           setActiveMeta(null);
           setModalOpen(true);
         }}
       />
+
 
       <EditNoteModal
         open={modalOpen}
