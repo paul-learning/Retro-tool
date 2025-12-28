@@ -4,6 +4,8 @@ import type { Note } from "@/lib/notesDb";
 import { Pencil, Trash2 } from "lucide-react";
 import { UI } from "../uiStrings";
 import { ClampedBody } from "./ClampedBody";
+import { Markdown } from "./Markdown";
+
 
 function fmt(ts: number) {
   return new Intl.DateTimeFormat(undefined, {
@@ -39,13 +41,24 @@ export function NoteCard({
       <div className="px-4 pt-4 pb-2 overflow-hidden font-semibold text-zinc-100">
         {note.title || UI.untitled}
       </div>
-      <div className="px-4 pb-3 flex-1 min-h-0 overflow-hidden text-zinc-100/90">
-        <ClampedBody text={note.text} />
-      </div>
+        <div className="px-4 pb-3 flex-1 min-h-0 overflow-hidden text-zinc-100/90">
+        <div
+            className="text-sm leading-relaxed"
+            style={{
+            overflow: "hidden",
+            display: "-webkit-box",
+            WebkitBoxOrient: "vertical" as any,
+            WebkitLineClamp: 6,
+            }}
+        >
+            <Markdown>{note.text || ""}</Markdown>
+        </div>
+        </div>
 
 
-      <div className="flex items-center justify-between px-2 py-2">
-        <button
+
+      <div className="flex items-center justify-center px-2 py-2">
+       {/* <button
           onClick={onEditClick}
           aria-label={UI.ariaEditNote}
           title={UI.titleEdit}
@@ -65,12 +78,13 @@ export function NoteCard({
           "
         >
           <Pencil className="h-4 w-4" />
-        </button>
-        <span className="px-4 text-[11px] leading-4 text-zinc-400">
+        </button> */}
+        <span className="px-4 items-center text-[11px] leading-4 text-zinc-400">
         {note.updatedAt === note.createdAt
             ? `Created ${fmt(note.createdAt)}`
             : `Edited ${fmt(note.updatedAt)}`}
         </span>
+        {/*
         <button
           onClick={onAskDelete}
           aria-label={UI.ariaDeleteNote}
@@ -91,7 +105,7 @@ export function NoteCard({
           "
         >
           <Trash2 className="h-4 w-4" />
-        </button>
+        </button>*/}
       </div>
     </article>
   );

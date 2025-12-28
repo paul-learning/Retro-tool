@@ -1,0 +1,78 @@
+"use client";
+
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
+const ALLOWED_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+
+function safeUrlTransform(url: string) {
+  try {
+    // allow relative and hash links
+    if (url.startsWith("/") || url.startsWith("#")) return url;
+
+    const parsed = new URL(url);
+    if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) return "";
+    return url;
+  } catch {
+    return "";
+  }
+}
+
+export function Markdown({
+  children,
+  className = "",
+}: {
+  children: string;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        skipHtml
+        urlTransform={safeUrlTransform}
+        components={{
+          a: ({ ...props }) => (
+            <a
+              {...props}
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onClick?.(e);
+              }}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-300 underline underline-offset-2 hover:text-indigo-200"
+            />
+          ),
+          code: ({ children }) => (
+            <code className="rounded bg-white/10 px-1 py-0.5 text-[0.95em]">
+              {children}
+            </code>
+          ),
+          pre: ({ children }) => (
+            <pre className="mt-2 overflow-auto rounded-xl border border-white/10 bg-white/[0.04] p-3 text-xs">
+              {children}
+            </pre>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-2 border-white/15 pl-3 text-zinc-200/90">
+              {children}
+            </blockquote>
+          ),
+          ul: ({ children }) => <ul className="list-disc pl-5">{children}</ul>,
+          ol: ({ children }) => <ol className="list-decimal pl-5">{children}</ol>,
+          li: ({ children }) => <li className="my-1">{children}</li>,
+          h1: ({ children }) => (
+            <h1 className="mb-1 mt-2 text-base font-semibold">{children}</h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="mb-1 mt-2 text-sm font-semibold">{children}</h2>
+          ),
+          p: ({ children }) => <p className="my-1">{children}</p>,
+        }}
+      >
+        {children}
+      </ReactMarkdown>
+    </div>
+  );
+}
