@@ -39,24 +39,36 @@ export function EditNoteModal({
     });
     }, [open]);
 
-  // Global Escape handling: works regardless of focus
-  useEffect(() => {
-    if (!open) return;
 
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
     const isDirty =
         originalDraft !== null &&
         (draft.title !== originalDraft.title || draft.text !== originalDraft.text);
 
+ // Global keyboard handling (Escape + Ctrl/Cmd+Enter)
+useEffect(() => {
+  if (!open) return;
+
+  function onKeyDown(e: KeyboardEvent) {
+    // Escape = cancel
+    if (e.key === "Escape") {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+
+    // Ctrl/Cmd + Enter = save (only if dirty)
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      e.preventDefault();
+      if (!isDirty) return;
+      onCommit();
+      onClose();
+    }
+  }
+
+  window.addEventListener("keydown", onKeyDown);
+  return () => window.removeEventListener("keydown", onKeyDown);
+}, [open, onClose, onCommit, isDirty]);
+       
   if (!open) return null;
 
   return (
@@ -86,13 +98,7 @@ export function EditNoteModal({
           ref={taRef}
           className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20 min-h-[160px] overflow-y-auto overflow-x-hidden"
             onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                e.preventDefault();
-                if (!isDirty) return;
-                onCommit();
-                onClose();
-            }
-            if (e.key === "Escape") onClose();
+                if (e.key === "Escape") onClose();
             }}
         />
         <div className="mt-4 flex items-center justify-between">
