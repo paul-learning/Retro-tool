@@ -240,7 +240,7 @@ useEffect(() => {
                 />
 
                 <div className="min-h-[220px] w-full overflow-auto rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100">
-                    <div className="text-[11px] text-zinc-400 mb-2">UI.preview</div>
+                    <div className="text-[11px] text-zinc-400 mb-2">{UI.preview}</div>
                     <Markdown className="text-zinc-100/90">{draft.text || ""}</Markdown>
                 </div>
                 </div>
