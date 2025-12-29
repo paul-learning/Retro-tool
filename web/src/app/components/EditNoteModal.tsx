@@ -244,7 +244,6 @@ useEffect(() => {
                     <Markdown className="text-zinc-100/90">{draft.text || ""}</Markdown>
                 </div>
                 </div>
-
         {meta && (
             <div className="mt-3 text-[11px] text-zinc-400 flex justify-end">
                                 <span>
