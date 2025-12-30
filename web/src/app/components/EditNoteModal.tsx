@@ -3,7 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { UI } from "../uiStrings";
 import { useAutosizeTextarea } from "../hooks/useAutosizeTextarea";
-import { Markdown } from "./Markdown";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+
 
 
 function fmt(ts: number) {
@@ -15,6 +17,28 @@ function fmt(ts: number) {
     minute: "2-digit",
   }).format(new Date(ts));
 }
+function tryParseTiptapJSON(s: string) {
+  if (!s) return null;
+  try {
+    const parsed = JSON.parse(s);
+    return parsed && parsed.type === "doc" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function tiptapDocFromPlainText(text: string) {
+  return {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: text ? [{ type: "text", text }] : [],
+      },
+    ],
+  };
+}
+
 
 export function EditNoteModal({
   open,
@@ -31,76 +55,46 @@ export function EditNoteModal({
   onClose: () => void;
   meta: { createdAt: number; updatedAt: number } | null;
 }) {
+const [, forceRerender] = useState(0);
+const editor = useEditor({
+  immediatelyRender: false,
+  extensions: [StarterKit],
+  content:
+    tryParseTiptapJSON(draft.text) ?? tiptapDocFromPlainText(draft.text || ""),
+  editorProps: {
+    attributes: {
+      class:
+        "tiptap min-h-[220px] w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20",
+    },
+  },
+  onUpdate: ({ editor }) => {
+    setDraft((d) => ({ ...d, text: JSON.stringify(editor.getJSON()) }));
+  },
+  onSelectionUpdate: () => forceRerender((x) => x + 1),
+  onTransaction: () => forceRerender((x) => x + 1),
+});
+const prevOpen = useRef(false);
 
-  const taRef = useRef<HTMLTextAreaElement | null>(null);
+useEffect(() => {
+  if (!editor) return;
+
+  if (!prevOpen.current && open) {
+    const content =
+      tryParseTiptapJSON(draft.text) ?? tiptapDocFromPlainText(draft.text || "");
+    editor.commands.setContent(content, { emitUpdate: false });
+  }
+
+  prevOpen.current = open;
+}, [editor, open]); 
+
   const [originalDraft, setOriginalDraft] = useState<{ title: string; text: string } | null>(null);
-function applyToSelection(
-  transform: (selected: string) => { insert: string; cursorOffset?: number },
-) {
-  const el = taRef.current;
-  if (!el) return;
 
-  const start = el.selectionStart ?? 0;
-  const end = el.selectionEnd ?? 0;
-  const value = draft.text;
-
-  const selected = value.slice(start, end);
-  const { insert, cursorOffset } = transform(selected);
-
-  const next = value.slice(0, start) + insert + value.slice(end);
-  setDraft((d) => ({ ...d, text: next }));
-
-  requestAnimationFrame(() => {
-    const pos =
-      cursorOffset != null ? start + cursorOffset : start + insert.length;
-    el.focus();
-    el.setSelectionRange(pos, pos);
-  });
-}
-
-function wrap(prefix: string, suffix = prefix) {
-  applyToSelection((sel) => {
-    const s = sel || "";
-    const insert = `${prefix}${s}${suffix}`;
-    const cursorOffset = sel ? insert.length : prefix.length;
-    return { insert, cursorOffset };
-  });
-}
-
-function insertLinePrefix(prefix: string) {
-  applyToSelection((sel) => {
-    const insert = sel
-      ? sel
-          .split("\n")
-          .map((l) => (l.length ? prefix + l : l))
-          .join("\n")
-      : prefix;
-    return { insert, cursorOffset: insert.length };
-  });
-}
-
-function insertLink() {
-  applyToSelection((sel) => {
-    const text = sel || "label";
-    const insert = `[${text}](https://)`;
-    // put cursor inside URL
-    const cursorOffset = insert.indexOf("https://") + "https://".length;
-    return { insert, cursorOffset };
-  });
-}
-
-
-  // Keep autosize: runs when modal opens and text changes
-  useAutosizeTextarea(taRef, [open, draft.text]);
 
   // Auto-focus textarea on open (restores “Escape works while typing” feel too)
-  useEffect(() => {
-    if (!open) return;
-    // next tick so it focuses after render
-    requestAnimationFrame(() => taRef.current?.focus());
-  }, [open]);
+
     useEffect(() => {
     if (!open) return;
+
 
     // Snapshot draft when modal opens
     setOriginalDraft({
@@ -140,6 +134,33 @@ useEffect(() => {
 }, [open, onClose, onCommit, isDirty]);
        
   if (!open) return null;
+/* button handlers */
+const onBold = () => editor?.chain().focus().toggleBold().run();
+const onItalic = () => editor?.chain().focus().toggleItalic().run();
+const onStrike = () => editor?.chain().focus().toggleStrike().run();
+const onBullets = () =>
+  editor?.chain().focus().clearNodes().toggleBulletList().run();
+const onOrderedList = () => editor?.chain().focus().toggleOrderedList().run();
+const onQuote = () =>
+  editor?.chain().focus().clearNodes().toggleBlockquote().run();
+const onCode = () => editor?.chain().focus().toggleCode().run();
+const onCodeBlock = () => editor?.chain().focus().toggleCodeBlock().run();
+const onH1 = () =>
+  editor?.chain().focus().clearNodes().toggleHeading({ level: 1 }).run();
+const toolBtn = (active: boolean) =>
+  [
+    "rounded-lg border px-2 py-1 text-xs transition",
+    "border-white/10 text-zinc-200 hover:bg-white/[0.06]",
+    "focus:outline-none focus:ring-2 focus:ring-indigo-500/20",
+
+    // background + text color: choose ONE set
+    active
+      ? "border-indigo-500/30 bg-indigo-500/10 text-indigo-200"
+      : "bg-white/[0.03]",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
 
   return (
     <div
@@ -164,44 +185,38 @@ useEffect(() => {
         <div className="flex flex-wrap gap-1">
             <button
             type="button"
-            onClick={() => wrap("**")}
-            className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
-            title="Bold"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onBold}
+            className={toolBtn(!!editor?.isActive("bold"))}
+            title="Bold (Ctrl/Cmd+B)"
             >
             B
             </button>
 
             <button
             type="button"
-            onClick={() => wrap("*")}
-            className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
-            title="Italic"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onItalic}
+            className={toolBtn(!!editor?.isActive("italic"))}
+            title="Italic (Ctrl/Cmd+I)"
             >
             i
             </button>
 
             <button
             type="button"
-            onClick={() => wrap("`")}
-            className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onCode}
+            className={toolBtn(!!editor?.isActive("code"))}
             title="Inline code"
             >
             {"</>"}
             </button>
-
             <button
             type="button"
-            onClick={insertLink}
-            className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
-            title="Link"
-            >
-            🔗
-            </button>
-
-            <button
-            type="button"
-            onClick={() => insertLinePrefix("- ")}
-            className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onBullets}
+            className={toolBtn(!!editor?.isActive("bulletList"))}
             title="Bulleted list"
             >
             •
@@ -209,8 +224,9 @@ useEffect(() => {
 
             <button
             type="button"
-            onClick={() => insertLinePrefix("> ")}
-            className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onQuote}
+            className={toolBtn(!!editor?.isActive("blockquote"))}
             title="Quote"
             >
             “”
@@ -218,8 +234,9 @@ useEffect(() => {
 
             <button
             type="button"
-            onClick={() => insertLinePrefix("# ")}
-            className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onH1}
+            className={toolBtn(!!editor?.isActive("heading", { level: 1 }))}
             title="Heading"
             >
             H
@@ -227,32 +244,19 @@ useEffect(() => {
         </div>
         </div>
 
-            <div className="mt-3 grid gap-3 md:grid-cols-2">
-                <textarea
-                    value={draft.text}
-                    onChange={(e) => setDraft((d) => ({ ...d, text: e.target.value }))}
-                    placeholder={UI.bodyPlaceholder}
-                    ref={taRef}
-                    className="min-h-[220px] w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20 overflow-y-auto overflow-x-hidden"
-                    onKeyDown={(e) => {
-                    if (e.key === "Escape") onClose();
-                    }}
-                />
+        <div className="mt-3 max-h-[360px] overflow-y-auto rounded-xl">
+          <EditorContent editor={editor} />
+        </div>
 
-                <div className="min-h-[220px] w-full overflow-auto rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100">
-                    <div className="text-[11px] text-zinc-400 mb-2">{UI.preview}</div>
-                    <Markdown className="text-zinc-100/90">{draft.text || ""}</Markdown>
+            {meta && (
+                <div className="mt-3 text-[11px] text-zinc-400 flex justify-end">
+                                    <span>
+                        {meta.updatedAt === meta.createdAt
+                            ? `Created ${fmt(meta.createdAt)}`
+                            : `Edited ${fmt(meta.updatedAt)}`}
+                    </span>
                 </div>
-                </div>
-        {meta && (
-            <div className="mt-3 text-[11px] text-zinc-400 flex justify-end">
-                                <span>
-                    {meta.updatedAt === meta.createdAt
-                        ? `Created ${fmt(meta.createdAt)}`
-                        : `Edited ${fmt(meta.updatedAt)}`}
-                </span>
-            </div>
-            )}
+                )}
 
         <div className="mt-4 flex items-center justify-between">
             {/* Cancel */}
