@@ -35,5 +35,86 @@ body {
   background: rgba(255, 255, 255, 0.26);
 }
 .modal-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) rgba(255,255,255,0.06); }
+/* ===== Tiptap editor styles ===== */
+/* Make block formatting clearly visible inside the editor */
+.tiptap {
+  line-height: 1.5;
+}
+
+.tiptap p {
+  margin: 0.5rem 0;
+}
+
+.tiptap ul {
+  list-style: disc;
+  list-style-position: inside; 
+  padding-left: 0;             
+}
+
+.tiptap ol {
+  list-style: decimal;
+  list-style-position: inside; 
+  padding-left: 0;             
+}
+
+.tiptap li {
+  margin: 0.25rem 0;
+}
+
+.tiptap blockquote {
+  margin: 0.75rem 0;
+  border-left: 3px solid rgba(255, 255, 255, 0.25);
+  padding-left: 0.75rem;
+  opacity: 0.95;
+}
+
+.tiptap h1 {
+  margin: 0.75rem 0 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.tiptap li {
+  display: list-item;
+}
+
+.tiptap ::marker {
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.note-html ul {
+  list-style: disc;
+  list-style-position: inside; /* fixes hidden bullets with overflow */
+  margin: 0.25rem 0;
+  padding-left: 0;
+}
+
+.note-html ol {
+  list-style: decimal;
+  list-style-position: inside;
+  margin: 0.25rem 0;
+  padding-left: 0;
+}
+
+.note-html blockquote {
+  border-left: 2px solid rgba(255, 255, 255, 0.2);
+  padding-left: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.note-html h1 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.note-html p {
+  margin: 0.25rem 0;
+}
+/* Fix: keep bullet + text on same line */
+.tiptap li > p,
+.note-html li > p {
+  display: inline;
+  margin: 0;
+}
 
 
