@@ -16,37 +16,47 @@ import {
 } from "@/lib/crypto";
 
 type VaultStatus = "checking" | "needs-setup" | "locked" | "unlocked";
+const HAS_VAULT_LS_KEY = "vault:hasVault";
+
 
 export function useVault() {
   const [status, setStatus] = useState<VaultStatus>("checking");
   const [vaultKey, setVaultKey] = useState<CryptoKey | null>(null);
   const [hasVault, setHasVault] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const rec = await getVaultRecord();
-      if (cancelled) return;
+useEffect(() => {
+  let cancelled = false;
 
-      if (!rec) {
-        setHasVault(false);
-        setStatus("needs-setup");
-      } else {
-        setHasVault(true);
-        setStatus("locked");
-      }
-    })().catch(() => {
-      if (!cancelled) {
-        // If DB fails, keep it simple:
-        setHasVault(false);
-        setStatus("needs-setup");
-      }
-    });
+  // Fast path: decide initial UI immediately based on localStorage marker.
+  const hasMarker = localStorage.getItem(HAS_VAULT_LS_KEY) === "1";
+  setHasVault(hasMarker);
+  setStatus(hasMarker ? "locked" : "needs-setup");
 
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // Source of truth: verify via IndexedDB and correct marker if needed.
+  (async () => {
+    const rec = await getVaultRecord();
+    if (cancelled) return;
+
+    if (!rec) {
+      localStorage.removeItem(HAS_VAULT_LS_KEY);
+      setHasVault(false);
+      setStatus("needs-setup");
+    } else {
+      localStorage.setItem(HAS_VAULT_LS_KEY, "1");
+      setHasVault(true);
+      setStatus("locked");
+    }
+  })().catch(() => {
+    if (cancelled) return;
+    // If DB fails, keep the fast-path UI (don't flip to needs-setup).
+    // Optional: you could introduce an error status later.
+  });
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
 
   const setupVault = useCallback(async (passphrase: string): Promise<{ recoveryKey: string }> => {
     // 1) create random vault key
@@ -84,6 +94,8 @@ export function useVault() {
     };
 
     await putVaultRecord(rec);
+    localStorage.setItem(HAS_VAULT_LS_KEY, "1");
+
 
     // unlock immediately (this session)
     setVaultKey(vk);
@@ -96,6 +108,7 @@ export function useVault() {
   const unlockWithPassphrase = useCallback(async (passphrase: string) => {
     const rec = await getVaultRecord();
     if (!rec) {
+      localStorage.removeItem(HAS_VAULT_LS_KEY);
       setHasVault(false);
       setStatus("needs-setup");
       return;
@@ -114,6 +127,7 @@ export function useVault() {
 
     const vk = await importRawAesGcmKey(raw);
     setVaultKey(vk);
+    localStorage.setItem(HAS_VAULT_LS_KEY, "1");
     setHasVault(true);
     setStatus("unlocked");
   }, []);
@@ -121,6 +135,7 @@ export function useVault() {
   const unlockWithRecoveryKey = useCallback(async (recoveryKey: string) => {
     const rec = await getVaultRecord();
     if (!rec) {
+      localStorage.removeItem(HAS_VAULT_LS_KEY);
       setHasVault(false);
       setStatus("needs-setup");
       return;
@@ -138,6 +153,7 @@ export function useVault() {
 
     const vk = await importRawAesGcmKey(raw);
     setVaultKey(vk);
+    localStorage.setItem(HAS_VAULT_LS_KEY, "1");
     setHasVault(true);
     setStatus("unlocked");
   }, []);

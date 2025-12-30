@@ -75,7 +75,7 @@ export function VaultModal({
                 submit();
             }}
             >
-          <div className="text-sm font-semibold">{UI.saveRecoveryKeyPrompt}</div>
+          <h2 className="text-sm font-semibold">{UI.saveRecoveryKeyPrompt}</h2>
           <p className="mt-2 text-xs text-zinc-400 leading-relaxed">
             {UI.recoveryKeyExplanation}
           </p>
@@ -180,6 +180,7 @@ export function VaultModal({
         {!useRecovery ? (
           <input
             autoFocus
+            aria-label={UI.passphrase}
             type="password"
             value={passphrase}
             onChange={(e) => setPassphrase(e.target.value)}
