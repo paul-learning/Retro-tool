@@ -135,18 +135,45 @@ useEffect(() => {
        
   if (!open) return null;
 /* button handlers */
-const onBold = () => editor?.chain().focus().toggleBold().run();
-const onItalic = () => editor?.chain().focus().toggleItalic().run();
-const onStrike = () => editor?.chain().focus().toggleStrike().run();
-const onBullets = () =>
+const bump = () => forceRerender((x) => x + 1);
+
+const onBold = () => {
+  editor?.chain().focus().toggleBold().run();
+  bump();
+};
+const onItalic = () => {
+  editor?.chain().focus().toggleItalic().run();
+  bump();
+};
+const onStrike = () => {
+  editor?.chain().focus().toggleStrike().run();
+  bump();
+};
+const onBullets = () => {
   editor?.chain().focus().clearNodes().toggleBulletList().run();
-const onOrderedList = () => editor?.chain().focus().toggleOrderedList().run();
-const onQuote = () =>
+  bump();
+};
+const onOrderedList = () => {
+  editor?.chain().focus().toggleOrderedList().run();
+  bump();
+};
+const onQuote = () => {
   editor?.chain().focus().clearNodes().toggleBlockquote().run();
-const onCode = () => editor?.chain().focus().toggleCode().run();
-const onCodeBlock = () => editor?.chain().focus().toggleCodeBlock().run();
-const onH1 = () =>
+  bump();
+};
+const onCode = () => {
+  editor?.chain().focus().toggleCode().run();
+  bump();
+};
+const onCodeBlock = () => {
+  editor?.chain().focus().toggleCodeBlock().run();
+  bump();
+};
+const onH1 = () => {
   editor?.chain().focus().clearNodes().toggleHeading({ level: 1 }).run();
+  bump();
+};
+
 const toolBtn = (active: boolean) =>
   [
     "rounded-lg border px-2 py-1 text-xs transition",
