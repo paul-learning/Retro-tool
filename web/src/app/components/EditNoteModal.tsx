@@ -70,6 +70,43 @@ export function EditNoteModal({
   const [linkUrl, setLinkUrl] = useState("");
   const [, forceRerender] = useState(0);
   const [hasEditorFocus, setHasEditorFocus] = useState(false);
+  const [toolbar, setToolbar] = useState({ 
+    bold: false, 
+    italic: false, 
+    code: false,
+    link: false,
+    bulletList: false,
+    blockquote: false,
+    h1: false,
+  });
+
+const syncToolbar = () => {
+  if (!editor) return;
+
+  const { state } = editor;
+  const { empty, $from } = state.selection;
+
+  const marks = empty ? (state.storedMarks ?? $from.marks()) : null;
+
+  const markOn = (name: string) =>
+    empty
+      ? !!marks?.some((m) => m.type.name === name) || editor.isActive(name)
+      : editor.isActive(name);
+
+  const nodeOn = (name: string, attrs?: Record<string, any>) =>
+    editor.isActive(name, attrs);
+
+  setToolbar({
+    bold: markOn("bold"),
+    italic: markOn("italic"),
+    code: markOn("code"),
+    link: markOn("link"),
+    bulletList: nodeOn("bulletList"),
+    blockquote: nodeOn("blockquote"),
+    h1: nodeOn("heading", { level: 1 }),
+  });
+};
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
@@ -92,18 +129,19 @@ export function EditNoteModal({
     },
     onUpdate: ({ editor }) => {
       setDraft((d) => ({ ...d, text: JSON.stringify(editor.getJSON()) }));
-      forceRerender((x) => x + 1);
+      syncToolbar();
     },
-    onSelectionUpdate: () => forceRerender((x) => x + 1),
-    onTransaction: () => forceRerender((x) => x + 1),
+    onSelectionUpdate: () => syncToolbar(),
+    onTransaction: () => syncToolbar(),
     onFocus: () => {
       setHasEditorFocus(true);
-      forceRerender((x) => x + 1);
+      syncToolbar();
     },
     onBlur: () => {
       setHasEditorFocus(false);
-      forceRerender((x) => x + 1);
+      syncToolbar();
     },
+
   });
 
   const prevOpen = useRef(false);
@@ -166,22 +204,20 @@ export function EditNoteModal({
   if (!open) return null;
 
   // ----- toolbar state helpers (this is the important bit) -----
-  const isMarkActive = (mark: "bold" | "italic" | "code" | "strike" | "link") => {
-    if (!editor) return false;
+const isMarkActive = (mark: "bold" | "italic" | "code" | "strike" | "link") => {
+  if (!editor) return false;
 
-    const { state } = editor;
-    const { empty, $from } = state.selection;
+  const { state } = editor;
+  const { empty, $from } = state.selection;
 
-    // If editor isn't focused and selection is empty, don't show "stored marks" as active.
-    if (!hasEditorFocus && empty) return false;
+  if (empty) {
+    const marks = state.storedMarks ?? $from.marks();
+    return marks.some((m) => m.type.name === mark) || editor.isActive(mark);
+  }
 
-    if (empty) {
-      const marks = state.storedMarks ?? $from.marks();
-      return marks.some((m) => m.type.name === mark);
-    }
+  return editor.isActive(mark);
+};
 
-    return editor.isActive(mark);
-  };
 
 
   const isNodeActive = (node: string, attrs?: Record<string, any>) => {
@@ -202,7 +238,15 @@ export function EditNoteModal({
       .join(" ");
 
   // ----- button handlers -----
-  const onBold = () => editor?.chain().focus().toggleBold().run();
+const onBold = () => {
+  if (!editor) return;
+  editor.chain().focus().toggleBold().run();
+
+  // important: read state after ProseMirror finishes its selection changes
+  requestAnimationFrame(syncToolbar);
+};
+
+
   const onItalic = () => editor?.chain().focus().toggleItalic().run();
   const onCode = () => editor?.chain().focus().toggleCode().run();
   const onBullets = () => editor?.chain().focus().clearNodes().toggleBulletList().run();
@@ -240,7 +284,7 @@ export function EditNoteModal({
     setLinkModalOpen(false);
     forceRerender((x) => x + 1);
   };
-
+const boldActive = isMarkActive("bold");
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm"
@@ -267,8 +311,7 @@ export function EditNoteModal({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={onBold}
-              className={toolBtn(isMarkActive("bold"))}
-              title="Bold (Ctrl/Cmd+B)"
+              className={toolBtn(toolbar.bold)}
             >
               B
             </button>
@@ -277,7 +320,7 @@ export function EditNoteModal({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={onItalic}
-              className={toolBtn(isMarkActive("italic"))}
+              className={toolBtn(toolbar.italic)}
               title="Italic (Ctrl/Cmd+I)"
             >
               i
@@ -287,7 +330,7 @@ export function EditNoteModal({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={onCode}
-              className={toolBtn(isMarkActive("code"))}
+              className={toolBtn(toolbar.code)}
               title="Inline code"
             >
               {"</>"}
@@ -297,7 +340,7 @@ export function EditNoteModal({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={onBullets}
-              className={toolBtn(isNodeActive("bulletList"))}
+              className={toolBtn(toolbar.bulletList)}
               title="Bulleted list"
             >
               •
@@ -310,7 +353,7 @@ export function EditNoteModal({
               onClick={onLink}
               className={
                 canLinkNow
-                  ? toolBtn(isMarkActive("link"))
+                  ? toolBtn(toolbar.link)
                   : toolBtn(false) + " opacity-50 cursor-not-allowed"
               }
               title="Link"
@@ -322,7 +365,7 @@ export function EditNoteModal({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={onQuote}
-              className={toolBtn(isNodeActive("blockquote"))}
+              className={toolBtn(toolbar.blockquote)}
               title="Quote"
             >
               “”
@@ -332,7 +375,7 @@ export function EditNoteModal({
               type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={onH1}
-              className={toolBtn(isNodeActive("heading", { level: 1 }))}
+              className={toolBtn(toolbar.h1)}
               title="Heading"
             >
               H
