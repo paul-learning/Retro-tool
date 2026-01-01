@@ -3,8 +3,7 @@
 import type { Note } from "@/lib/notesDb";
 import { Pencil, Trash2 } from "lucide-react";
 import { UI } from "../uiStrings";
-import { ClampedBody } from "./ClampedBody";
-import { Markdown } from "./Markdown";
+import { useEffect, useRef, useState } from "react";
 
 
 function fmt(ts: number) {
@@ -16,6 +15,30 @@ function fmt(ts: number) {
     minute: "2-digit",
   }).format(new Date(ts));
 }
+function tiptapJSONToText(jsonString: string): string {
+  if (!jsonString) return "";
+
+  try {
+    const doc = JSON.parse(jsonString);
+    const out: string[] = [];
+
+    const walk = (node: any) => {
+      if (!node) return;
+
+      if (node.type === "text" && typeof node.text === "string") out.push(node.text);
+      if (Array.isArray(node.content)) node.content.forEach(walk);
+
+      if (["paragraph", "heading", "listItem"].includes(node.type)) out.push("\n");
+    };
+
+    walk(doc);
+    return out.join("").replace(/\n{3,}/g, "\n\n").trim();
+  } catch {
+    return jsonString;
+  }
+}
+
+
 
 export function NoteCard({
   note,
@@ -30,6 +53,28 @@ export function NoteCard({
   onAskDelete: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
+  const preview = tiptapJSONToText(note.text || "");
+
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+
+  useEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+
+    const measure = () => {
+      // small epsilon avoids off-by-1 from subpixel layout
+      setIsOverflowing(el.scrollHeight > el.clientHeight + 1);
+    };
+
+    measure();
+
+    // Re-measure on resize (card width changes => line breaks change)
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+
+    return () => ro.disconnect();
+  }, [preview]);
   return (
     <article
       key={note.id}
@@ -41,19 +86,27 @@ export function NoteCard({
       <div className="px-4 pt-4 pb-2 overflow-hidden font-semibold text-zinc-100">
         {note.title || UI.untitled}
       </div>
-        <div className="px-4 pb-3 flex-1 min-h-0 overflow-hidden text-zinc-100/90">
-        <div
-            className="text-sm leading-relaxed"
-            style={{
-            overflow: "hidden",
-            display: "-webkit-box",
-            WebkitBoxOrient: "vertical" as any,
-            WebkitLineClamp: 6,
-            }}
-        >
-            <Markdown>{note.text || ""}</Markdown>
-        </div>
-        </div>
+      <div className="relative px-4 pb-3 flex-1 min-h-0 overflow-hidden">
+      <div
+        ref={bodyRef}
+        className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/90"
+        style={{
+          overflow: "hidden",
+          display: "-webkit-box",
+          WebkitBoxOrient: "vertical" as any,
+          WebkitLineClamp: 6,
+        }}
+      >
+        {preview}
+      </div>
+
+      {isOverflowing && (
+        <>
+          <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-[#0B0D12] to-transparent" />
+          <div className="pointer-events-none absolute bottom-2 right-4 text-zinc-400">…</div>
+        </>
+      )}
+    </div>
 
 
 
