@@ -1,4 +1,5 @@
 @import "tailwindcss";
+
 html,
 body {
   margin: 0;
@@ -7,6 +8,7 @@ body {
   color: #111;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
 }
+
 /* Firefox */
 * {
   scrollbar-width: thin;
@@ -34,7 +36,12 @@ body {
 .modal-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.26);
 }
-.modal-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.18) rgba(255,255,255,0.06); }
+
+.modal-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) rgba(255, 255, 255, 0.06);
+}
+
 /* ===== Tiptap editor styles ===== */
 /* Make block formatting clearly visible inside the editor */
 .tiptap {
@@ -47,18 +54,23 @@ body {
 
 .tiptap ul {
   list-style: disc;
-  list-style-position: inside; 
-  padding-left: 0;             
+  list-style-position: inside;
+  padding-left: 0;
 }
 
 .tiptap ol {
   list-style: decimal;
-  list-style-position: inside; 
-  padding-left: 0;             
+  list-style-position: inside;
+  padding-left: 0;
 }
 
 .tiptap li {
   margin: 0.25rem 0;
+  display: list-item;
+}
+
+.tiptap ::marker {
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .tiptap blockquote {
@@ -73,14 +85,8 @@ body {
   font-size: 1.25rem;
   font-weight: 700;
 }
-.tiptap li {
-  display: list-item;
-}
 
-.tiptap ::marker {
-  color: rgba(255, 255, 255, 0.75);
-}
-
+/* ===== Note HTML (non-clamped / general render) ===== */
 .note-html ul {
   list-style: disc;
   list-style-position: inside; /* fixes hidden bullets with overflow */
@@ -93,6 +99,10 @@ body {
   list-style-position: inside;
   margin: 0.25rem 0;
   padding-left: 0;
+}
+
+.note-html li {
+  display: list-item;
 }
 
 .note-html blockquote {
@@ -110,6 +120,7 @@ body {
 .note-html p {
   margin: 0.25rem 0;
 }
+
 /* Fix: keep bullet + text on same line */
 .tiptap li > p,
 .note-html li > p {
@@ -117,4 +128,68 @@ body {
   margin: 0;
 }
 
+/* ===== Tiptap preview (clamped HTML in cards) ===== */
+/* Flatten margins so clamp behaves, but keep list markers visible */
+.tiptapPreview p,
+.tiptapPreview h1,
+.tiptapPreview h2,
+.tiptapPreview h3,
+.tiptapPreview ul,
+.tiptapPreview ol {
+  margin: 0;
+}
 
+/* IMPORTANT: for clamped previews, use INSIDE markers so bullets render under overflow/line-clamp */
+.tiptapPreview ul {
+  list-style: disc;
+  list-style-position: inside;
+  padding-left: 0;
+}
+
+.tiptapPreview ol {
+  list-style: decimal;
+  list-style-position: inside;
+  padding-left: 0;
+}
+
+.tiptapPreview li {
+  display: list-item;
+}
+
+/* Keep paragraphs inside list items inline to avoid extra vertical gaps */
+.tiptapPreview li > p {
+  display: inline;
+  margin: 0;
+}
+
+/* ===== Links (editor + preview) ===== */
+.tiptap a,
+.tiptapPreview a,
+.note-html a {
+  color: rgb(99 102 241); /* indigo-500 */
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s ease, opacity 0.15s ease;
+}
+
+.tiptap a:hover,
+.tiptapPreview a:hover,
+.note-html a:hover {
+  color: rgb(129 140 248); /* indigo-400 */
+  opacity: 0.9;
+}
+
+.tiptap a:active,
+.tiptapPreview a:active,
+.note-html a:active {
+  opacity: 0.75;
+}
+
+/* External link indicator */
+.tiptapPreview a[target="_blank"]::after,
+.note-html a[target="_blank"]::after {
+  content: "↗";
+  margin-left: 0.15em;
+  font-size: 0.75em;
+  opacity: 0.6;
+}

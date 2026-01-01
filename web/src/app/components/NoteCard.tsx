@@ -4,6 +4,10 @@ import type { Note } from "@/lib/notesDb";
 import { Pencil, Trash2 } from "lucide-react";
 import { UI } from "../uiStrings";
 import { useEffect, useRef, useState } from "react";
+import { generateHTML } from "@tiptap/html";
+import StarterKit from "@tiptap/starter-kit";
+import DOMPurify from "dompurify";
+
 
 
 function fmt(ts: number) {
@@ -15,28 +19,37 @@ function fmt(ts: number) {
     minute: "2-digit",
   }).format(new Date(ts));
 }
-function tiptapJSONToText(jsonString: string): string {
-  if (!jsonString) return "";
+function sanitizeHTML(html: string): string {
+  return DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ADD_ATTR: ["target", "rel"],
+  });
+}
 
+function tryParseTiptapDoc(jsonString: string) {
+  if (!jsonString) return null;
   try {
     const doc = JSON.parse(jsonString);
-    const out: string[] = [];
-
-    const walk = (node: any) => {
-      if (!node) return;
-
-      if (node.type === "text" && typeof node.text === "string") out.push(node.text);
-      if (Array.isArray(node.content)) node.content.forEach(walk);
-
-      if (["paragraph", "heading", "listItem"].includes(node.type)) out.push("\n");
-    };
-
-    walk(doc);
-    return out.join("").replace(/\n{3,}/g, "\n\n").trim();
+    return doc && doc.type === "doc" ? doc : null;
   } catch {
-    return jsonString;
+    return null;
   }
 }
+
+function tiptapDocFromPlainText(text: string) {
+  return {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: text ? [{ type: "text", text }] : [] },
+    ],
+  };
+}
+
+function tiptapJSONToHTML(jsonString: string): string {
+  const doc = tryParseTiptapDoc(jsonString) ?? tiptapDocFromPlainText(jsonString || "");
+  return generateHTML(doc, [StarterKit]);
+}
+
 
 
 
@@ -53,7 +66,11 @@ export function NoteCard({
   onAskDelete: (e: React.MouseEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
 }) {
-  const preview = tiptapJSONToText(note.text || "");
+const previewHtml = sanitizeHTML(
+  tiptapJSONToHTML(note.text || "")
+);
+
+
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -74,7 +91,7 @@ export function NoteCard({
     ro.observe(el);
 
     return () => ro.disconnect();
-  }, [preview]);
+  }, [previewHtml]);
   return (
     <article
       key={note.id}
@@ -87,18 +104,17 @@ export function NoteCard({
         {note.title || UI.untitled}
       </div>
       <div className="relative px-4 pb-3 flex-1 min-h-0 overflow-hidden">
-      <div
-        ref={bodyRef}
-        className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-100/90"
-        style={{
-          overflow: "hidden",
-          display: "-webkit-box",
-          WebkitBoxOrient: "vertical" as any,
-          WebkitLineClamp: 6,
-        }}
-      >
-        {preview}
-      </div>
+        <div
+          ref={bodyRef}
+          className="tiptapPreview text-sm leading-relaxed text-zinc-100/90"
+          style={{
+            overflow: "hidden",
+            display: "-webkit-box",
+            WebkitBoxOrient: "vertical" as any,
+            WebkitLineClamp: 6,
+          }}
+          dangerouslySetInnerHTML={{ __html: previewHtml }}
+        />
 
       {isOverflowing && (
         <>
