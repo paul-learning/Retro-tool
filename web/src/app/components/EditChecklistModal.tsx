@@ -9,6 +9,9 @@ export type ChecklistItem = {
   checked: boolean;
 };
 
+// internal: remembers where an item was among UNCHECKED items when it got checked
+type PinMap = Record<string, number>;
+
 type BaseChecklistDraft = {
   title: string;
   items: ChecklistItem[];
@@ -39,7 +42,7 @@ function normalizeItems(items: ChecklistItem[]) {
   return [{ id: uid(), text: "", checked: false }];
 }
 
-// ✅ Stable Keep-style ordering: unchecked first, then checked; preserve relative order within each group.
+// render order: unchecked first, then checked (stable within groups)
 function sortKeepStyle(items: ChecklistItem[]) {
   const unchecked: ChecklistItem[] = [];
   const checked: ChecklistItem[] = [];
@@ -62,26 +65,33 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
   onClose: () => void;
   meta: { createdAt: number; updatedAt: number } | null;
 }) {
-  // Use normalized + keep-sorted list for rendering
+  // UI: keep-style ordering
   const items = useMemo(() => sortKeepStyle(normalizeItems(draft.items)), [draft.items]);
 
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [originalDraft, setOriginalDraft] = useState<TDraft | null>(null);
 
+  // ✅ remembers “old unchecked position” while modal is open
+  const [restoreIndex, setRestoreIndex] = useState<PinMap>({});
+
+  // ✅ small per-row popover (id of row whose handle menu is open)
+  const [reorderMenuFor, setReorderMenuFor] = useState<string | null>(null);
+
   useEffect(() => {
     if (!open) return;
 
-    // Snapshot for dirty-check
     setOriginalDraft({
       ...draft,
       items: normalizeItems(draft.items),
     });
 
-    // Ensure at least one row exists in state
     setDraft((d) => ({
       ...d,
       items: normalizeItems(d.items),
     }));
+
+    setRestoreIndex({});
+    setReorderMenuFor(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -108,6 +118,7 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
+        setReorderMenuFor(null);
         onClose();
         return;
       }
@@ -131,40 +142,6 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
       ...d,
       items: normalizeItems(d.items).map((it) => (it.id === id ? { ...it, ...patch } : it)),
     }));
-  };
-
-  // ✅ Keep-style toggle: update checked AND move item into the correct section (top vs bottom)
-  const toggleCheckedKeep = (id: string) => {
-    setDraft((d) => {
-      const current = normalizeItems(d.items);
-      const idx = current.findIndex((x) => x.id === id);
-      if (idx === -1) return d;
-
-      const item = current[idx];
-      const nextChecked = !item.checked;
-
-      // Update checked state
-      const updated: ChecklistItem = { ...item, checked: nextChecked };
-      const without = current.filter((x) => x.id !== id);
-
-      // Reinsert at end of its section:
-      // - if checked => after last checked? (i.e., bottom overall)
-      // - if unchecked => after last unchecked (i.e., before checked section)
-      const next = nextChecked
-        ? [...without, updated] // checked always goes to bottom
-        : (() => {
-            const insertAt = without.findIndex((x) => x.checked); // first checked
-            if (insertAt === -1) return [...without, updated]; // all unchecked
-            return [...without.slice(0, insertAt), updated, ...without.slice(insertAt)];
-          })();
-
-      // Keep focus on same row after reorder
-      requestAnimationFrame(() => {
-        inputRefs.current[id]?.focus();
-      });
-
-      return { ...d, items: next };
-    });
   };
 
   const addItemAfter = (afterId?: string) => {
@@ -203,13 +180,106 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
 
       return { ...d, items: ensured };
     });
+
+    setRestoreIndex((m) => {
+      const { [id]: _, ...rest } = m;
+      return rest;
+    });
+    setReorderMenuFor((v) => (v === id ? null : v));
   };
 
-  const toggleAllTo = (checked: boolean) => {
+  /**
+   * ✅ 1) Keep behavior with "restore old position" when unchecking.
+   *
+   * - When checking: remember index among unchecked items (in current UI order).
+   * - When unchecking: insert back into unchecked section at remembered index.
+   */
+  const toggleCheckedKeepRestore = (id: string) => {
     setDraft((d) => {
-      const current = normalizeItems(d.items).map((it) => ({ ...it, checked }));
-      // Keep-style ordering after mass toggle
-      const next = sortKeepStyle(current);
+      const current = normalizeItems(d.items);
+      const idx = current.findIndex((x) => x.id === id);
+      if (idx === -1) return d;
+
+      const item = current[idx];
+      const willBeChecked = !item.checked;
+
+      // Compute current render order for stable "unchecked index"
+      const rendered = sortKeepStyle(current);
+      const uncheckedRendered = rendered.filter((x) => !x.checked);
+      const uncheckedIndexNow = uncheckedRendered.findIndex((x) => x.id === id);
+
+      // When checking, store the old unchecked index
+      if (willBeChecked) {
+        setRestoreIndex((m) => ({
+          ...m,
+          [id]: uncheckedIndexNow === -1 ? uncheckedRendered.length : uncheckedIndexNow,
+        }));
+      }
+
+      const updated: ChecklistItem = { ...item, checked: willBeChecked };
+      const without = current.filter((x) => x.id !== id);
+
+      // Split without into groups (in CURRENT underlying order)
+      const unchecked = without.filter((x) => !x.checked);
+      const checked = without.filter((x) => x.checked);
+
+      let next: ChecklistItem[];
+
+      if (willBeChecked) {
+        // checked goes to bottom of checked group (like Keep)
+        next = [...unchecked, ...checked, updated];
+      } else {
+        // unchecking: restore into unchecked at previous index
+        const desired = restoreIndex[id];
+        const insertAt =
+          typeof desired === "number"
+            ? Math.max(0, Math.min(desired, unchecked.length))
+            : unchecked.length; // fallback
+
+        next = [...unchecked.slice(0, insertAt), updated, ...unchecked.slice(insertAt), ...checked];
+
+        // cleanup stored index once used
+        setRestoreIndex((m) => {
+          const { [id]: _, ...rest } = m;
+          return rest;
+        });
+      }
+
+      requestAnimationFrame(() => {
+        inputRefs.current[id]?.focus();
+      });
+
+      return { ...d, items: next };
+    });
+  };
+
+  /**
+   * ✅ 2) Manual reorder within the visible order.
+   * We move in *rendered* order (unchecked first then checked),
+   * then write back a new underlying order that keeps "unchecked then checked".
+   */
+  const moveInRenderedOrder = (id: string, dir: "up" | "down") => {
+    setDraft((d) => {
+      const current = normalizeItems(d.items);
+      const rendered = sortKeepStyle(current);
+      const i = rendered.findIndex((x) => x.id === id);
+      if (i === -1) return d;
+
+      const j = dir === "up" ? i - 1 : i + 1;
+      if (j < 0 || j >= rendered.length) return d;
+
+      // Swap in rendered list
+      const swapped = [...rendered];
+      const tmp = swapped[i];
+      swapped[i] = swapped[j];
+      swapped[j] = tmp;
+
+      // Now rebuild underlying list as "unchecked then checked" in this swapped order
+      const nextUnchecked = swapped.filter((x) => !x.checked);
+      const nextChecked = swapped.filter((x) => x.checked);
+      const next = [...nextUnchecked, ...nextChecked];
+
+      requestAnimationFrame(() => inputRefs.current[id]?.focus());
       return { ...d, items: next };
     });
   };
@@ -217,7 +287,10 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm"
-      onMouseDown={() => onClose()}
+      onMouseDown={() => {
+        setReorderMenuFor(null);
+        onClose();
+      }}
     >
       <div
         className="mt-24 w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col max-h-[calc(100vh-8rem)] overflow-hidden"
@@ -232,43 +305,21 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
                   focus:ring-4 focus:ring-indigo-500/20"
         />
 
-        <div className="mt-3 flex items-center justify-between gap-2">
-          {/*
-          <div className="text-xs text-zinc-400">
-            Enter = new item • Backspace on empty = delete • Ctrl/Cmd+Enter = save
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => toggleAllTo(false)}
-              className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
-            >
-              Uncheck all
-            </button>
-            <button
-              type="button"
-              onClick={() => toggleAllTo(true)}
-              className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-xs text-zinc-200 hover:bg-white/[0.06]"
-            >
-              Check all
-            </button>
-          </div>*/}
-        </div>
-
         <div className="mt-3 max-h-[420px] overflow-y-auto rounded-xl border border-white/10 bg-white/[0.02]">
           <div className="p-2">
             {items.map((it, idx) => {
               const isEmpty = !it.text.trim();
+              const isMenuOpen = reorderMenuFor === it.id;
 
               return (
                 <div
                   key={it.id}
-                  className="group flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-white/[0.04]"
+                  className="group flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-white/[0.04] relative"
                 >
                   <button
                     type="button"
                     aria-label={it.checked ? "Uncheck item" : "Check item"}
-                    onClick={() => toggleCheckedKeep(it.id)} 
+                    onClick={() => toggleCheckedKeepRestore(it.id)}
                     className={[
                       "h-5 w-5 rounded border transition flex items-center justify-center",
                       it.checked
@@ -297,7 +348,6 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
                         removeItem(it.id);
                       }
 
-                      // Arrow navigation uses the *rendered* order (unchecked then checked)
                       if (e.key === "ArrowUp") {
                         const prev = items[idx - 1];
                         if (prev) {
@@ -321,6 +371,38 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
                     ].join(" ")}
                   />
 
+                  {/* ✅ NEW: reorder handle (three stacked lines) */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setReorderMenuFor((v) => (v === it.id ? null : it.id))}
+                      className="opacity-0 group-hover:opacity-100 transition text-zinc-300 hover:text-white rounded-lg px-2 py-1"
+                      title="Reorder"
+                      aria-label="Reorder"
+                    >
+                      ≡
+                    </button>
+
+                    {isMenuOpen && (
+                      <div className="absolute right-0 top-8 z-10 rounded-xl border border-white/10 bg-[#0B0D12] shadow-2xl overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => moveInRenderedOrder(it.id, "up")}
+                          className="w-full px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06] text-left"
+                        >
+                          ↑ Move up
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => moveInRenderedOrder(it.id, "down")}
+                          className="w-full px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06] text-left"
+                        >
+                          ↓ Move down
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <button
                     type="button"
                     onClick={() => addItemAfter(it.id)}
@@ -343,14 +425,6 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
                 </div>
               );
             })}
-{/*
-            <button
-              type="button"
-              onClick={() => addItemAfter(items[items.length - 1]?.id)}
-              className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06]"
-            >
-              + Add item
-            </button>*/}
           </div>
         </div>
 
@@ -366,7 +440,10 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
 
         <div className="mt-4 flex items-center justify-between">
           <button
-            onClick={onClose}
+            onClick={() => {
+              setReorderMenuFor(null);
+              onClose();
+            }}
             className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06]"
           >
             {UI.cancel}
