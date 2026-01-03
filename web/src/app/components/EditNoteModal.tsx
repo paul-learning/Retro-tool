@@ -19,7 +19,6 @@ function fmt(ts: number) {
 function normalizeUrl(input: string) {
   const raw = input.trim();
   if (!raw) return "";
-
   if (raw.startsWith("#")) return raw;
   if (raw.startsWith("mailto:")) return raw;
 
@@ -51,7 +50,10 @@ function tiptapDocFromPlainText(text: string) {
   };
 }
 
-export function EditNoteModal({
+// ✅ Generic: works with your unified Draft as long as it has title/text.
+type BaseDraft = { title: string; text: string };
+
+export function EditNoteModal<TDraft extends BaseDraft>({
   open,
   draft,
   setDraft,
@@ -60,19 +62,19 @@ export function EditNoteModal({
   meta,
 }: {
   open: boolean;
-  draft: { title: string; text: string };
-  setDraft: React.Dispatch<React.SetStateAction<{ title: string; text: string }>>;
+  draft: TDraft;
+  setDraft: React.Dispatch<React.SetStateAction<TDraft>>;
   onCommit: () => void;
   onClose: () => void;
   meta: { createdAt: number; updatedAt: number } | null;
 }) {
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
-  const [, forceRerender] = useState(0);
   const [hasEditorFocus, setHasEditorFocus] = useState(false);
-  const [toolbar, setToolbar] = useState({ 
-    bold: false, 
-    italic: false, 
+
+  const [toolbar, setToolbar] = useState({
+    bold: false,
+    italic: false,
     code: false,
     link: false,
     bulletList: false,
@@ -80,91 +82,89 @@ export function EditNoteModal({
     h1: false,
   });
 
-const syncToolbar = () => {
-  if (!editor) return;
-
-  const { state } = editor;
-  const { empty, $from } = state.selection;
-
-  const marks = empty ? (state.storedMarks ?? $from.marks()) : null;
-
-  const markOn = (name: string) =>
-    empty
-      ? !!marks?.some((m) => m.type.name === name) || editor.isActive(name)
-      : editor.isActive(name);
-
-  const nodeOn = (name: string, attrs?: Record<string, any>) =>
-    editor.isActive(name, attrs);
-
-  setToolbar({
-    bold: markOn("bold"),
-    italic: markOn("italic"),
-    code: markOn("code"),
-    link: markOn("link"),
-    bulletList: nodeOn("bulletList"),
-    blockquote: nodeOn("blockquote"),
-    h1: nodeOn("heading", { level: 1 }),
-  });
-};
-
   const editor = useEditor({
+    // ✅ fixes Next/Tiptap SSR hydration mismatch runtime error
     immediatelyRender: false,
+
     extensions: [
       StarterKit,
       Link.configure({
         openOnClick: false,
         autolink: true,
+        linkOnPaste: true,
         HTMLAttributes: {
           target: "_blank",
           rel: "noopener noreferrer",
         },
       }),
     ],
+
+    // initial content (we also setContent on open below)
     content: tryParseTiptapJSON(draft.text) ?? tiptapDocFromPlainText(draft.text || ""),
+
     editorProps: {
       attributes: {
         class:
           "tiptap min-h-[220px] w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20",
       },
     },
+
     onUpdate: ({ editor }) => {
       setDraft((d) => ({ ...d, text: JSON.stringify(editor.getJSON()) }));
-      syncToolbar();
-    },
-    onSelectionUpdate: () => syncToolbar(),
-    onTransaction: () => syncToolbar(),
-    onFocus: () => {
-      setHasEditorFocus(true);
-      syncToolbar();
-    },
-    onBlur: () => {
-      setHasEditorFocus(false);
-      syncToolbar();
+      syncToolbar(editor);
     },
 
+    onSelectionUpdate: ({ editor }) => syncToolbar(editor),
+    onTransaction: ({ editor }) => syncToolbar(editor),
+
+    onFocus: ({ editor }) => {
+      setHasEditorFocus(true);
+      syncToolbar(editor);
+    },
+    onBlur: ({ editor }) => {
+      setHasEditorFocus(false);
+      syncToolbar(editor);
+    },
   });
 
-  const prevOpen = useRef(false);
+  function syncToolbar(ed = editor) {
+    if (!ed) return;
 
+    const { state } = ed;
+    const { empty, $from } = state.selection;
+
+    const marks = empty ? state.storedMarks ?? $from.marks() : null;
+
+    const markOn = (name: string) =>
+      empty ? !!marks?.some((m) => m.type.name === name) || ed.isActive(name) : ed.isActive(name);
+
+    const nodeOn = (name: string, attrs?: Record<string, any>) => ed.isActive(name, attrs);
+
+    setToolbar({
+      bold: markOn("bold"),
+      italic: markOn("italic"),
+      code: markOn("code"),
+      link: markOn("link"),
+      bulletList: nodeOn("bulletList"),
+      blockquote: nodeOn("blockquote"),
+      h1: nodeOn("heading", { level: 1 }),
+    });
+  }
+
+  // Ensure content is set when opening (without emitting update)
+  const prevOpen = useRef(false);
   useEffect(() => {
     if (!editor) return;
-
-    // When modal opens: set editor content once (without emitting update)
     if (!prevOpen.current && open) {
-      const content =
-        tryParseTiptapJSON(draft.text) ?? tiptapDocFromPlainText(draft.text || "");
+      const content = tryParseTiptapJSON(draft.text) ?? tiptapDocFromPlainText(draft.text || "");
       editor.commands.setContent(content, { emitUpdate: false });
-      forceRerender((x) => x + 1);
+      requestAnimationFrame(() => syncToolbar(editor));
     }
-
     prevOpen.current = open;
   }, [editor, open, draft.text]);
 
-  // Snapshot draft when modal opens for "dirty" detection
-  const [originalDraft, setOriginalDraft] = useState<{ title: string; text: string } | null>(
-    null
-  );
-
+  // Dirty detection snapshot
+  const [originalDraft, setOriginalDraft] = useState<{ title: string; text: string } | null>(null);
   useEffect(() => {
     if (!open) return;
     setOriginalDraft({ title: draft.title, text: draft.text });
@@ -174,7 +174,7 @@ const syncToolbar = () => {
     originalDraft !== null &&
     (draft.title !== originalDraft.title || draft.text !== originalDraft.text);
 
-  // Global keyboard handling (Escape + Ctrl/Cmd+Enter)
+  // Escape + Ctrl/Cmd+Enter
   useEffect(() => {
     if (!open) return;
 
@@ -203,28 +203,6 @@ const syncToolbar = () => {
 
   if (!open) return null;
 
-  // ----- toolbar state helpers (this is the important bit) -----
-const isMarkActive = (mark: "bold" | "italic" | "code" | "strike" | "link") => {
-  if (!editor) return false;
-
-  const { state } = editor;
-  const { empty, $from } = state.selection;
-
-  if (empty) {
-    const marks = state.storedMarks ?? $from.marks();
-    return marks.some((m) => m.type.name === mark) || editor.isActive(mark);
-  }
-
-  return editor.isActive(mark);
-};
-
-
-
-  const isNodeActive = (node: string, attrs?: Record<string, any>) => {
-    if (!editor) return false;
-    return editor.isActive(node, attrs);
-  };
-
   const toolBtn = (active: boolean) =>
     [
       "rounded-lg border px-2 py-1 text-xs transition",
@@ -233,19 +211,13 @@ const isMarkActive = (mark: "bold" | "italic" | "code" | "strike" | "link") => {
       active
         ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100 shadow-[0_0_0_1px_rgba(99,102,241,0.25)]"
         : "bg-white/[0.03]",
-    ]
-      .filter(Boolean)
-      .join(" ");
+    ].join(" ");
 
-  // ----- button handlers -----
-const onBold = () => {
-  if (!editor) return;
-  editor.chain().focus().toggleBold().run();
-
-  // important: read state after ProseMirror finishes its selection changes
-  requestAnimationFrame(syncToolbar);
-};
-
+  const onBold = () => {
+    if (!editor) return;
+    editor.chain().focus().toggleBold().run();
+    requestAnimationFrame(() => syncToolbar(editor));
+  };
 
   const onItalic = () => editor?.chain().focus().toggleItalic().run();
   const onCode = () => editor?.chain().focus().toggleCode().run();
@@ -267,7 +239,6 @@ const onBold = () => {
     if (!editor) return;
 
     const href = normalizeUrl(linkUrl);
-
     if (!href) {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
     } else {
@@ -275,22 +246,20 @@ const onBold = () => {
     }
 
     setLinkModalOpen(false);
-    forceRerender((x) => x + 1);
+    requestAnimationFrame(() => syncToolbar(editor));
   };
 
   const removeLink = () => {
     if (!editor) return;
     editor.chain().focus().extendMarkRange("link").unsetLink().run();
     setLinkModalOpen(false);
-    forceRerender((x) => x + 1);
+    requestAnimationFrame(() => syncToolbar(editor));
   };
-const boldActive = isMarkActive("bold");
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm"
-      onMouseDown={() => {
-        onClose();
-      }}
+      onMouseDown={() => onClose()}
     >
       <div
         className="mt-24 w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col max-h-[calc(100vh-8rem)] overflow-hidden"
@@ -305,6 +274,7 @@ const boldActive = isMarkActive("bold");
                   focus:ring-4 focus:ring-indigo-500/20"
         />
 
+        {/* Toolbar */}
         <div className="mt-3 flex items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1">
             <button
@@ -312,6 +282,7 @@ const boldActive = isMarkActive("bold");
               onMouseDown={(e) => e.preventDefault()}
               onClick={onBold}
               className={toolBtn(toolbar.bold)}
+              title="Bold (Ctrl/Cmd+B)"
             >
               B
             </button>
@@ -352,9 +323,7 @@ const boldActive = isMarkActive("bold");
               onMouseDown={(e) => e.preventDefault()}
               onClick={onLink}
               className={
-                canLinkNow
-                  ? toolBtn(toolbar.link)
-                  : toolBtn(false) + " opacity-50 cursor-not-allowed"
+                canLinkNow ? toolBtn(toolbar.link) : toolBtn(false) + " opacity-50 cursor-not-allowed"
               }
               title="Link"
             >
@@ -381,8 +350,12 @@ const boldActive = isMarkActive("bold");
               H
             </button>
           </div>
+
+          {/* tiny focus hint (optional, feels “Keep”-ish) */}
+          <div className="text-[11px] text-zinc-500">{hasEditorFocus ? "Editing…" : ""}</div>
         </div>
 
+        {/* Editor */}
         <div className="mt-3 max-h-[360px] overflow-y-auto rounded-xl">
           <EditorContent editor={editor} />
         </div>
@@ -397,6 +370,7 @@ const boldActive = isMarkActive("bold");
           </div>
         )}
 
+        {/* Link modal */}
         {linkModalOpen && (
           <div
             className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
@@ -461,6 +435,7 @@ const boldActive = isMarkActive("bold");
           </div>
         )}
 
+        {/* Footer buttons */}
         <div className="mt-4 flex items-center justify-between">
           <button
             onClick={onClose}

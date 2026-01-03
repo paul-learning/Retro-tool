@@ -8,6 +8,7 @@ import { NotesHeader } from "./components/NotesHeader";
 import { NoteCard } from "./components/NoteCard";
 import { ContextMenu } from "./components/ContextMenu";
 import { EditNoteModal } from "./components/EditNoteModal";
+import { EditChecklistModal } from "./components/EditChecklistModal";
 import { ConfirmDeleteDialog } from "./components/ConfirmDeleteDialog";
 import { Fab } from "./components/Fab";
 import { AppFooter } from "./components/AppFooter";
@@ -17,13 +18,26 @@ import { VaultModal } from "./components/VaultModal";
 
 export default function Page() {
   const vault = useVault();
-  const { notes, deleteNote, draft, setDraft, activeId, startCreate, startEditModal, commitDraft } =
-    useNotes(vault.vaultKey);
 
-  const [modalOpen, setModalOpen] = useState(false);
+  const {
+    notes,
+    deleteNote,
+    draft,
+    setDraft,
+    activeId,
+    startCreate,
+    startEditModal,
+    commitDraft,
+  } = useNotes(vault.vaultKey);
+
+  const [textModalOpen, setTextModalOpen] = useState(false);
+  const [checklistModalOpen, setChecklistModalOpen] = useState(false);
+
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [activeMeta, setActiveMeta] = useState<{ createdAt: number; updatedAt: number } | null>(null);
+
   const { menu, closeMenu, openMenu } = useContextMenu();
+
   const [forceVaultUi, setForceVaultUi] = useState(false);
   const [setupFlow, setSetupFlow] = useState(false);
 
@@ -40,6 +54,25 @@ export default function Page() {
     vault.status === "needs-setup" ||
     vault.status === "locked";
 
+  const closeAllModals = () => {
+    setTextModalOpen(false);
+    setChecklistModalOpen(false);
+  };
+
+  const openEditorForNote = (note: any) => {
+    // note is "any" here to keep page.tsx drop-in even while you’re mid-migration.
+    // Once your Note type is updated in useNotes, you can type this properly.
+    startEditModal(note);
+    setActiveMeta({ createdAt: note.createdAt, updatedAt: note.updatedAt });
+
+    if (note.type === "checklist") {
+      setChecklistModalOpen(true);
+      setTextModalOpen(false);
+    } else {
+      setTextModalOpen(true);
+      setChecklistModalOpen(false);
+    }
+  };
 
   return (
     <main className="min-h-screen bg-[#0B0D12] text-zinc-100">
@@ -48,16 +81,16 @@ export default function Page() {
         <VaultModal
           mode={setupFlow || vault.status === "needs-setup" ? "setup" : "unlock"}
           onSetup={async (passphrase) => {
-            setSetupFlow(true);            // keep mode="setup"
+            setSetupFlow(true); // keep mode="setup"
             const res = await vault.setupVault(passphrase);
-            setForceVaultUi(true);         // keep modal mounted for recovery screen
+            setForceVaultUi(true); // keep modal mounted for recovery screen
             return res;
           }}
           onUnlockPassphrase={vault.unlockWithPassphrase}
           onUnlockRecovery={vault.unlockWithRecoveryKey}
           onRecoveryDone={() => {
             setForceVaultUi(false);
-            setSetupFlow(false);           // now allow normal "unlock" mode logic
+            setSetupFlow(false); // now allow normal "unlock" mode logic
           }}
         />
       )}
@@ -69,33 +102,26 @@ export default function Page() {
       </div>
 
       <NotesHeader count={notes.length} />
- <section className="mx-auto max-w-5xl px-5 pb-24 pt-6">
+
+      <section className="mx-auto max-w-5xl px-5 pb-24 pt-6">
         {notes.length === 0 ? (
           <div className="grid place-items-center py-24">
             <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-center shadow-[0_18px_60px_rgba(0,0,0,0.35)]">
               <div className="text-sm font-semibold">{UI.emptyStateTitle}</div>
-              <p className="mt-2 text-xs leading-relaxed text-zinc-400">
-                {UI.emptyStateBody}
-              </p>
+              <p className="mt-2 text-xs leading-relaxed text-zinc-400">{UI.emptyStateBody}</p>
             </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-3 items-start sm:grid-cols-2 lg:grid-cols-3">
-            {notes.map((note) => (
+            {notes.map((note: any) => (
               <NoteCard
                 key={note.id}
                 note={note}
-                onOpen={() => {
-                  startEditModal(note);
-                  setActiveMeta({ createdAt: note.createdAt, updatedAt: note.updatedAt });
-                  setModalOpen(true);
-                }}
+                onOpen={() => openEditorForNote(note)}
                 onContextMenu={(e) => openMenu(e, note.id)}
                 onEditClick={(e) => {
                   e.stopPropagation();
-                  startEditModal(note);
-                  setActiveMeta({ createdAt: note.createdAt, updatedAt: note.updatedAt });
-                  setModalOpen(true);
+                  openEditorForNote(note);
                 }}
                 onAskDelete={(e) => {
                   e.stopPropagation();
@@ -112,12 +138,8 @@ export default function Page() {
           y={menu.y}
           onClose={closeMenu}
           onEdit={() => {
-            const n = notes.find((n) => n.id === menu.noteId);
-            if (n) {
-              startEditModal(n);
-              setActiveMeta({ createdAt: n.createdAt, updatedAt: n.updatedAt });
-              setModalOpen(true);
-            }
+            const n = notes.find((n: any) => n.id === menu.noteId);
+            if (n) openEditorForNote(n);
           }}
           onDelete={() => {
             if (menu.noteId) setConfirmDeleteId(menu.noteId);
@@ -126,21 +148,38 @@ export default function Page() {
       </section>
 
       <Fab
-        ariaLabel= {UI.ariaLabelFab}
-        onClick={() => {
-          startCreate();
+        ariaLabel={UI.ariaLabelFab}
+        onNewTextNote={() => {
+          closeAllModals();
+          startCreate("text");
           setActiveMeta(null);
-          setModalOpen(true);
+          setTextModalOpen(true);
+        }}
+        onNewChecklist={() => {
+          closeAllModals();
+          startCreate("checklist");
+          setActiveMeta(null);
+          setChecklistModalOpen(true);
         }}
       />
 
-
+      {/* Text note modal */}
       <EditNoteModal
-        open={modalOpen}
+        open={textModalOpen}
         draft={draft}
         setDraft={setDraft}
         onCommit={handleCommit}
-        onClose={() => setModalOpen(false)}
+        onClose={() => setTextModalOpen(false)}
+        meta={activeMeta}
+      />
+
+      {/* Checklist modal */}
+      <EditChecklistModal
+        open={checklistModalOpen}
+        draft={draft}
+        setDraft={setDraft}
+        onCommit={handleCommit}
+        onClose={() => setChecklistModalOpen(false)}
         meta={activeMeta}
       />
 
@@ -155,7 +194,6 @@ export default function Page() {
       />
 
       <AppFooter />
-
     </main>
   );
 }
