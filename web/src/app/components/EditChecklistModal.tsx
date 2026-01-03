@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { UI } from "../uiStrings";
+import { Reorder, useDragControls, motion } from "framer-motion";
 
 export type ChecklistItem = {
   id: string;
@@ -9,13 +10,12 @@ export type ChecklistItem = {
   checked: boolean;
 };
 
-// internal: remembers where an item was among UNCHECKED items when it got checked
-type PinMap = Record<string, number>;
-
 type BaseChecklistDraft = {
   title: string;
   items: ChecklistItem[];
 };
+
+type PinMap = Record<string, number>;
 
 function fmt(ts: number) {
   return new Intl.DateTimeFormat(undefined, {
@@ -42,7 +42,7 @@ function normalizeItems(items: ChecklistItem[]) {
   return [{ id: uid(), text: "", checked: false }];
 }
 
-// render order: unchecked first, then checked (stable within groups)
+// Keep-style render order: unchecked first, then checked, stable within groups.
 function sortKeepStyle(items: ChecklistItem[]) {
   const unchecked: ChecklistItem[] = [];
   const checked: ChecklistItem[] = [];
@@ -65,17 +65,14 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
   onClose: () => void;
   meta: { createdAt: number; updatedAt: number } | null;
 }) {
-  // UI: keep-style ordering
+  // Render order is Keep-style.
   const items = useMemo(() => sortKeepStyle(normalizeItems(draft.items)), [draft.items]);
 
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [originalDraft, setOriginalDraft] = useState<TDraft | null>(null);
 
-  // ✅ remembers “old unchecked position” while modal is open
+  // Remembers old unchecked index so unchecking returns to its original spot.
   const [restoreIndex, setRestoreIndex] = useState<PinMap>({});
-
-  // ✅ small per-row popover (id of row whose handle menu is open)
-  const [reorderMenuFor, setReorderMenuFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -85,13 +82,14 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
       items: normalizeItems(draft.items),
     });
 
+    // ensure at least one row exists
     setDraft((d) => ({
       ...d,
       items: normalizeItems(d.items),
     }));
 
+    // reset per-open
     setRestoreIndex({});
-    setReorderMenuFor(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -118,7 +116,6 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        setReorderMenuFor(null);
         onClose();
         return;
       }
@@ -185,14 +182,12 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
       const { [id]: _, ...rest } = m;
       return rest;
     });
-    setReorderMenuFor((v) => (v === id ? null : v));
   };
 
   /**
-   * ✅ 1) Keep behavior with "restore old position" when unchecking.
-   *
-   * - When checking: remember index among unchecked items (in current UI order).
-   * - When unchecking: insert back into unchecked section at remembered index.
+   * Keep-style check/uncheck with restore:
+   * - checking: remember index among unchecked items (in current render order)
+   * - unchecking: insert back into unchecked section at remembered index
    */
   const toggleCheckedKeepRestore = (id: string) => {
     setDraft((d) => {
@@ -203,12 +198,10 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
       const item = current[idx];
       const willBeChecked = !item.checked;
 
-      // Compute current render order for stable "unchecked index"
       const rendered = sortKeepStyle(current);
       const uncheckedRendered = rendered.filter((x) => !x.checked);
       const uncheckedIndexNow = uncheckedRendered.findIndex((x) => x.id === id);
 
-      // When checking, store the old unchecked index
       if (willBeChecked) {
         setRestoreIndex((m) => ({
           ...m,
@@ -219,78 +212,52 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
       const updated: ChecklistItem = { ...item, checked: willBeChecked };
       const without = current.filter((x) => x.id !== id);
 
-      // Split without into groups (in CURRENT underlying order)
       const unchecked = without.filter((x) => !x.checked);
       const checked = without.filter((x) => x.checked);
 
       let next: ChecklistItem[];
 
       if (willBeChecked) {
-        // checked goes to bottom of checked group (like Keep)
+        // checked always goes to the bottom
         next = [...unchecked, ...checked, updated];
       } else {
-        // unchecking: restore into unchecked at previous index
+        // restore into unchecked at remembered index
         const desired = restoreIndex[id];
         const insertAt =
           typeof desired === "number"
             ? Math.max(0, Math.min(desired, unchecked.length))
-            : unchecked.length; // fallback
+            : unchecked.length;
 
         next = [...unchecked.slice(0, insertAt), updated, ...unchecked.slice(insertAt), ...checked];
 
-        // cleanup stored index once used
         setRestoreIndex((m) => {
           const { [id]: _, ...rest } = m;
           return rest;
         });
       }
 
-      requestAnimationFrame(() => {
-        inputRefs.current[id]?.focus();
-      });
-
+      requestAnimationFrame(() => inputRefs.current[id]?.focus());
       return { ...d, items: next };
     });
   };
 
   /**
-   * ✅ 2) Manual reorder within the visible order.
-   * We move in *rendered* order (unchecked first then checked),
-   * then write back a new underlying order that keeps "unchecked then checked".
+   * Called by Reorder.Group on drag reorders.
+   * We receive the FULL keep-sorted order (unchecked first, checked last).
+   * Then we write it back to state as "unchecked then checked" (same), so it's stable.
    */
-  const moveInRenderedOrder = (id: string, dir: "up" | "down") => {
+  const onReorder = (nextRendered: ChecklistItem[]) => {
     setDraft((d) => {
-      const current = normalizeItems(d.items);
-      const rendered = sortKeepStyle(current);
-      const i = rendered.findIndex((x) => x.id === id);
-      if (i === -1) return d;
-
-      const j = dir === "up" ? i - 1 : i + 1;
-      if (j < 0 || j >= rendered.length) return d;
-
-      // Swap in rendered list
-      const swapped = [...rendered];
-      const tmp = swapped[i];
-      swapped[i] = swapped[j];
-      swapped[j] = tmp;
-
-      // Now rebuild underlying list as "unchecked then checked" in this swapped order
-      const nextUnchecked = swapped.filter((x) => !x.checked);
-      const nextChecked = swapped.filter((x) => x.checked);
-      const next = [...nextUnchecked, ...nextChecked];
-
-      requestAnimationFrame(() => inputRefs.current[id]?.focus());
-      return { ...d, items: next };
+      const nextUnchecked = nextRendered.filter((x) => !x.checked);
+      const nextChecked = nextRendered.filter((x) => x.checked);
+      return { ...d, items: [...nextUnchecked, ...nextChecked] };
     });
   };
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm"
-      onMouseDown={() => {
-        setReorderMenuFor(null);
-        onClose();
-      }}
+      onMouseDown={() => onClose()}
     >
       <div
         className="mt-24 w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col max-h-[calc(100vh-8rem)] overflow-hidden"
@@ -307,124 +274,31 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
 
         <div className="mt-3 max-h-[420px] overflow-y-auto rounded-xl border border-white/10 bg-white/[0.02]">
           <div className="p-2">
-            {items.map((it, idx) => {
-              const isEmpty = !it.text.trim();
-              const isMenuOpen = reorderMenuFor === it.id;
-
-              return (
-                <div
+            <Reorder.Group axis="y" values={items} onReorder={onReorder}>
+              {items.map((it, idx) => (
+                <ChecklistRow
                   key={it.id}
-                  className="group flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-white/[0.04] relative"
-                >
-                  <button
-                    type="button"
-                    aria-label={it.checked ? "Uncheck item" : "Check item"}
-                    onClick={() => toggleCheckedKeepRestore(it.id)}
-                    className={[
-                      "h-5 w-5 rounded border transition flex items-center justify-center",
-                      it.checked
-                        ? "border-indigo-400/60 bg-indigo-500/20"
-                        : "border-white/15 bg-white/[0.02]",
-                      "focus:outline-none focus:ring-2 focus:ring-indigo-500/20",
-                    ].join(" ")}
-                  >
-                    {it.checked ? "✓" : ""}
-                  </button>
+                  item={it}
+                  idx={idx}
+                  items={items}
+                  inputRefs={inputRefs}
+                  setItem={setItem}
+                  addItemAfter={addItemAfter}
+                  removeItem={removeItem}
+                  toggleChecked={() => toggleCheckedKeepRestore(it.id)}
+                />
+              ))}
+            </Reorder.Group>
 
-                  <input
-                    ref={(el) => {
-                      inputRefs.current[it.id] = el;
-                    }}
-                    value={it.text}
-                    onChange={(e) => setItem(it.id, { text: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addItemAfter(it.id);
-                      }
-
-                      if (e.key === "Backspace" && isEmpty && items.length > 1) {
-                        e.preventDefault();
-                        removeItem(it.id);
-                      }
-
-                      if (e.key === "ArrowUp") {
-                        const prev = items[idx - 1];
-                        if (prev) {
-                          e.preventDefault();
-                          inputRefs.current[prev.id]?.focus();
-                        }
-                      }
-                      if (e.key === "ArrowDown") {
-                        const next = items[idx + 1];
-                        if (next) {
-                          e.preventDefault();
-                          inputRefs.current[next.id]?.focus();
-                        }
-                      }
-                    }}
-                    placeholder={idx === 0 ? "List item…" : ""}
-                    className={[
-                      "flex-1 rounded-lg border border-white/0 bg-transparent px-2 py-1 text-sm outline-none",
-                      "focus:border-white/10 focus:bg-white/[0.02] focus:ring-2 focus:ring-indigo-500/20",
-                      it.checked ? "text-zinc-400 line-through" : "text-zinc-100",
-                    ].join(" ")}
-                  />
-
-                  {/* ✅ NEW: reorder handle (three stacked lines) */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setReorderMenuFor((v) => (v === it.id ? null : it.id))}
-                      className="opacity-0 group-hover:opacity-100 transition text-zinc-300 hover:text-white rounded-lg px-2 py-1"
-                      title="Reorder"
-                      aria-label="Reorder"
-                    >
-                      ≡
-                    </button>
-
-                    {isMenuOpen && (
-                      <div className="absolute right-0 top-8 z-10 rounded-xl border border-white/10 bg-[#0B0D12] shadow-2xl overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() => moveInRenderedOrder(it.id, "up")}
-                          className="w-full px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06] text-left"
-                        >
-                          ↑ Move up
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => moveInRenderedOrder(it.id, "down")}
-                          className="w-full px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06] text-left"
-                        >
-                          ↓ Move down
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => addItemAfter(it.id)}
-                    className="opacity-0 group-hover:opacity-100 transition text-zinc-300 hover:text-white rounded-lg px-2 py-1"
-                    title="Add item"
-                  >
-                    +
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      items.length > 1 ? removeItem(it.id) : setItem(it.id, { text: "", checked: false })
-                    }
-                    className="opacity-0 group-hover:opacity-100 transition text-zinc-300 hover:text-white rounded-lg px-2 py-1"
-                    title="Remove item"
-                  >
-                    ×
-                  </button>
-                </div>
-              );
-            })}
+            {/*
+            <button
+              type="button"
+              onClick={() => addItemAfter(items[items.length - 1]?.id)}
+              className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06]"
+            >
+              + Add item
+            </button>
+            */}
           </div>
         </div>
 
@@ -440,10 +314,7 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
 
         <div className="mt-4 flex items-center justify-between">
           <button
-            onClick={() => {
-              setReorderMenuFor(null);
-              onClose();
-            }}
+            onClick={onClose}
             className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06]"
           >
             {UI.cancel}
@@ -467,5 +338,127 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
         </div>
       </div>
     </div>
+  );
+}
+
+function ChecklistRow({
+  item: it,
+  idx,
+  items,
+  inputRefs,
+  setItem,
+  addItemAfter,
+  removeItem,
+  toggleChecked,
+}: {
+  item: ChecklistItem;
+  idx: number;
+  items: ChecklistItem[];
+  inputRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
+  setItem: (id: string, patch: Partial<ChecklistItem>) => void;
+  addItemAfter: (afterId?: string) => void;
+  removeItem: (id: string) => void;
+  toggleChecked: () => void;
+}) {
+  const controls = useDragControls();
+  const isEmpty = !it.text.trim();
+
+  return (
+    <Reorder.Item
+      value={it}
+      id={it.id}
+      drag="y"
+      dragListener={false} // ✅ only drag from handle
+      dragControls={controls}
+      // nice subtle “lift”
+      whileDrag={{ scale: 1.01 }}
+      className="group flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-white/[0.04]"
+    >
+      <button
+        type="button"
+        aria-label={it.checked ? "Uncheck item" : "Check item"}
+        onClick={toggleChecked}
+        className={[
+          "h-5 w-5 rounded border transition flex items-center justify-center",
+          it.checked ? "border-indigo-400/60 bg-indigo-500/20" : "border-white/15 bg-white/[0.02]",
+          "focus:outline-none focus:ring-2 focus:ring-indigo-500/20",
+        ].join(" ")}
+      >
+        {it.checked ? "✓" : ""}
+      </button>
+
+      <input
+        ref={(el) => {
+          inputRefs.current[it.id] = el;
+        }}
+        value={it.text}
+        onChange={(e) => setItem(it.id, { text: e.target.value })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            addItemAfter(it.id);
+          }
+
+          if (e.key === "Backspace" && isEmpty && items.length > 1) {
+            e.preventDefault();
+            removeItem(it.id);
+          }
+
+          if (e.key === "ArrowUp") {
+            const prev = items[idx - 1];
+            if (prev) {
+              e.preventDefault();
+              inputRefs.current[prev.id]?.focus();
+            }
+          }
+          if (e.key === "ArrowDown") {
+            const next = items[idx + 1];
+            if (next) {
+              e.preventDefault();
+              inputRefs.current[next.id]?.focus();
+            }
+          }
+        }}
+        placeholder={idx === 0 ? "List item…" : ""}
+        className={[
+          "flex-1 rounded-lg border border-white/0 bg-transparent px-2 py-1 text-sm outline-none",
+          "focus:border-white/10 focus:bg-white/[0.02] focus:ring-2 focus:ring-indigo-500/20",
+          it.checked ? "text-zinc-400 line-through" : "text-zinc-100",
+        ].join(" ")}
+      />
+
+      {/* ✅ Drag handle: click+hold then drag up/down */}
+      <button
+        type="button"
+        onPointerDown={(e) => {
+          // prevent focusing/selection oddities
+          e.preventDefault();
+          controls.start(e);
+        }}
+        className="opacity-0 group-hover:opacity-100 transition text-zinc-300 hover:text-white rounded-lg px-2 py-1 cursor-grab active:cursor-grabbing"
+        title="Drag to reorder"
+        aria-label="Drag to reorder"
+      >
+        ≡
+      </button>
+
+      <button
+        type="button"
+        onClick={() => addItemAfter(it.id)}
+        className="opacity-0 group-hover:opacity-100 transition text-zinc-300 hover:text-white rounded-lg px-2 py-1"
+        title="Add item"
+      >
+        +
+      </button>
+
+      <button
+        type="button"
+        onClick={() => (items.length > 1 ? removeItem(it.id) : setItem(it.id, { text: "", checked: false }))}
+        className="opacity-0 group-hover:opacity-100 transition text-zinc-300 hover:text-white rounded-lg px-2 py-1"
+        title="Remove item"
+      >
+        ×
+      </button>
+    </Reorder.Item>
   );
 }
