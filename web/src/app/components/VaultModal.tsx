@@ -58,7 +58,31 @@ function toneClasses(tone: Tone) {
   }
 }
 
-/* ───────────────────────────────────────────── update */
+function EyeToggle({
+  shown,
+  onToggle,
+  label,
+}: {
+  shown: boolean;
+  onToggle: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()} // keep focus in input
+      onClick={onToggle}
+      aria-label={label}
+      title={label}
+      className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-200 hover:bg-white/[0.06]"
+    >
+      {shown ? "Hide" : "Show"}
+    </button>
+  );
+}
+
+
+/* ───────────────────────────────────────────── */
 
 export function VaultModal({
   mode, // "setup" | "unlock"
@@ -87,6 +111,11 @@ export function VaultModal({
 
   const [shownRecoveryKey, setShownRecoveryKey] = useState<string | null>(null);
   const [confirmedSaved, setConfirmedSaved] = useState(false);
+
+  // visibility toggles
+const [showNew, setShowNew] = useState(false);
+const [showConfirm, setShowConfirm] = useState(false);
+const [showUnlock, setShowUnlock] = useState(false);
 
   const title = useMemo(() => {
     return mode === "setup"
@@ -236,15 +265,21 @@ export function VaultModal({
             <label className="mt-3 block text-[11px] text-zinc-400">
               Passphrase
             </label>
-            <input
-              autoFocus
-              type="password"
-              value={newPassphrase}
-              onChange={(e) => setNewPassphrase(e.target.value)}
-              placeholder="Use a long passphrase (12+ characters)"
-              className={`mt-1 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 ${tone.ring}`}
-            />
-
+            <div className="relative mt-1">
+              <input
+                autoFocus
+                type={showNew ? "text" : "password"}
+                value={newPassphrase}
+                onChange={(e) => setNewPassphrase(e.target.value)}
+                placeholder="Use a long passphrase (12+ characters)"
+                className={`w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 pr-16 text-sm text-zinc-100 outline-none focus:ring-4 ${tone.ring}`}
+              />
+              <EyeToggle
+                shown={showNew}
+                onToggle={() => setShowNew((v) => !v)}
+                label={showNew ? "Hide passphrase" : "Show passphrase"}
+              />
+            </div>
             <div className="mt-2 rounded-xl border border-white/10 bg-white/[0.03] p-3">
               <div className="flex items-center justify-between">
                 <div className="text-xs text-zinc-300">
@@ -276,13 +311,21 @@ export function VaultModal({
             <label className="mt-3 block text-[11px] text-zinc-400">
               Confirm passphrase
             </label>
-            <input
-              type="password"
-              value={confirmPassphrase}
-              onChange={(e) => setConfirmPassphrase(e.target.value)}
-              placeholder="Re-enter passphrase"
-              className="mt-1 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
-            />
+            <div className="relative mt-1">
+              <input
+                type={showConfirm ? "text" : "password"}
+                value={confirmPassphrase}
+                onChange={(e) => setConfirmPassphrase(e.target.value)}
+                placeholder="Re-enter passphrase"
+                className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 pr-16 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
+              />
+              <EyeToggle
+                shown={showConfirm}
+                onToggle={() => setShowConfirm((v) => !v)}
+                label={showConfirm ? "Hide passphrase" : "Show passphrase"}
+              />
+            </div>
+
 
             {isMismatch && (
               <div className="mt-2 text-xs text-red-200">
@@ -331,14 +374,22 @@ export function VaultModal({
             </div>
 
             {!useRecovery ? (
-              <input
-                autoFocus
-                type="password"
-                value={passphrase}
-                onChange={(e) => setPassphrase(e.target.value)}
-                placeholder="Passphrase"
-                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
-              />
+            <div className="relative mt-3">
+            <input
+              autoFocus
+              type={showUnlock ? "text" : "password"}
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              placeholder="Passphrase"
+              className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 pr-16 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
+            />
+            <EyeToggle
+              shown={showUnlock}
+              onToggle={() => setShowUnlock((v) => !v)}
+              label={showUnlock ? "Hide passphrase" : "Show passphrase"}
+            />
+            </div>
+
             ) : (
               <input
                 value={recoveryKey}
