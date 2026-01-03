@@ -39,6 +39,14 @@ function normalizeItems(items: ChecklistItem[]) {
   return [{ id: uid(), text: "", checked: false }];
 }
 
+// ✅ Stable Keep-style ordering: unchecked first, then checked; preserve relative order within each group.
+function sortKeepStyle(items: ChecklistItem[]) {
+  const unchecked: ChecklistItem[] = [];
+  const checked: ChecklistItem[] = [];
+  for (const it of items) (it.checked ? checked : unchecked).push(it);
+  return [...unchecked, ...checked];
+}
+
 export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
   open,
   draft,
@@ -54,9 +62,10 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
   onClose: () => void;
   meta: { createdAt: number; updatedAt: number } | null;
 }) {
-  const items = useMemo(() => normalizeItems(draft.items), [draft.items]);
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  // Use normalized + keep-sorted list for rendering
+  const items = useMemo(() => sortKeepStyle(normalizeItems(draft.items)), [draft.items]);
 
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [originalDraft, setOriginalDraft] = useState<TDraft | null>(null);
 
   useEffect(() => {
@@ -124,6 +133,40 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
     }));
   };
 
+  // ✅ Keep-style toggle: update checked AND move item into the correct section (top vs bottom)
+  const toggleCheckedKeep = (id: string) => {
+    setDraft((d) => {
+      const current = normalizeItems(d.items);
+      const idx = current.findIndex((x) => x.id === id);
+      if (idx === -1) return d;
+
+      const item = current[idx];
+      const nextChecked = !item.checked;
+
+      // Update checked state
+      const updated: ChecklistItem = { ...item, checked: nextChecked };
+      const without = current.filter((x) => x.id !== id);
+
+      // Reinsert at end of its section:
+      // - if checked => after last checked? (i.e., bottom overall)
+      // - if unchecked => after last unchecked (i.e., before checked section)
+      const next = nextChecked
+        ? [...without, updated] // checked always goes to bottom
+        : (() => {
+            const insertAt = without.findIndex((x) => x.checked); // first checked
+            if (insertAt === -1) return [...without, updated]; // all unchecked
+            return [...without.slice(0, insertAt), updated, ...without.slice(insertAt)];
+          })();
+
+      // Keep focus on same row after reorder
+      requestAnimationFrame(() => {
+        inputRefs.current[id]?.focus();
+      });
+
+      return { ...d, items: next };
+    });
+  };
+
   const addItemAfter = (afterId?: string) => {
     const newId = uid();
 
@@ -163,10 +206,12 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
   };
 
   const toggleAllTo = (checked: boolean) => {
-    setDraft((d) => ({
-      ...d,
-      items: normalizeItems(d.items).map((it) => ({ ...it, checked })),
-    }));
+    setDraft((d) => {
+      const current = normalizeItems(d.items).map((it) => ({ ...it, checked }));
+      // Keep-style ordering after mass toggle
+      const next = sortKeepStyle(current);
+      return { ...d, items: next };
+    });
   };
 
   return (
@@ -188,6 +233,7 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
         />
 
         <div className="mt-3 flex items-center justify-between gap-2">
+          {/*
           <div className="text-xs text-zinc-400">
             Enter = new item • Backspace on empty = delete • Ctrl/Cmd+Enter = save
           </div>
@@ -206,7 +252,7 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
             >
               Check all
             </button>
-          </div>
+          </div>*/}
         </div>
 
         <div className="mt-3 max-h-[420px] overflow-y-auto rounded-xl border border-white/10 bg-white/[0.02]">
@@ -222,7 +268,7 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
                   <button
                     type="button"
                     aria-label={it.checked ? "Uncheck item" : "Check item"}
-                    onClick={() => setItem(it.id, { checked: !it.checked })}
+                    onClick={() => toggleCheckedKeep(it.id)} 
                     className={[
                       "h-5 w-5 rounded border transition flex items-center justify-center",
                       it.checked
@@ -251,6 +297,7 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
                         removeItem(it.id);
                       }
 
+                      // Arrow navigation uses the *rendered* order (unchecked then checked)
                       if (e.key === "ArrowUp") {
                         const prev = items[idx - 1];
                         if (prev) {
@@ -296,14 +343,14 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
                 </div>
               );
             })}
-
+{/*
             <button
               type="button"
               onClick={() => addItemAfter(items[items.length - 1]?.id)}
               className="mt-2 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06]"
             >
               + Add item
-            </button>
+            </button>*/}
           </div>
         </div>
 
