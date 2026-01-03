@@ -2,13 +2,15 @@ import { test, expect } from "@playwright/test";
 
 async function setupVaultAndCloseRecovery(page: any, pass = "correct-password") {
   await expect(page.getByRole("button", { name: /^create vault$/i })).toBeVisible();
-  await page.getByLabel(/passphrase/i).fill(pass);
+  await page.getByPlaceholder(/12\+ characters/i).fill(pass);
+  await page.getByPlaceholder(/re-enter passphrase/i).fill(pass);
   await page.getByRole("button", { name: /^create vault$/i }).click();
+
 
   // Recovery screen: wait for Continue, then confirm + continue
   const continueBtn = page.getByRole("button", { name: /^continue$/i });
   await expect(continueBtn).toBeVisible();
-  await page.getByRole("checkbox", { name: /i have saved/i }).check();
+  await page.getByRole("checkbox").check();
   await continueBtn.click();
 
   // IMPORTANT: prove the vault gate is gone (modal closed)
@@ -43,7 +45,7 @@ test("vault unlocks with correct password", async ({ page, browserName }) => {
   }
 
 
-  await page.getByLabel(/passphrase/i).fill("correct-password");
+  await page.getByRole("textbox", { name: /^passphrase$/i }).fill("correct-password");
   await unlockBtn.click();
 
   // Modal should be gone after successful unlock
