@@ -9,7 +9,7 @@ export function VaultModal({
   onSetup,
   onUnlockPassphrase,
   onUnlockRecovery,
-  onRecoveryDone, 
+  onRecoveryDone,
 }: {
   mode: "setup" | "unlock";
   onSetup: (passphrase: string) => Promise<{ recoveryKey: string }>;
@@ -17,9 +17,15 @@ export function VaultModal({
   onUnlockRecovery: (recoveryKey: string) => Promise<void>;
   onRecoveryDone?: () => void;
 }) {
+  // setup fields
+  const [newPassphrase, setNewPassphrase] = useState("");
+  const [confirmPassphrase, setConfirmPassphrase] = useState("");
+
+  // unlock fields
   const [passphrase, setPassphrase] = useState("");
   const [recoveryKey, setRecoveryKey] = useState("");
   const [useRecovery, setUseRecovery] = useState(false);
+
   const [err, setErr] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -36,11 +42,19 @@ export function VaultModal({
 
     try {
       if (mode === "setup") {
-        if (passphrase.trim().length < 8) {
+        const p1 = newPassphrase.trim();
+        const p2 = confirmPassphrase.trim();
+
+        if (p1.length < 8) {
           setErr(UI.passphraseMinimumHint);
           return;
         }
-        const { recoveryKey } = await onSetup(passphrase);
+        if (p1 !== p2) {
+          setErr("Passphrases do not match.");
+          return;
+        }
+
+        const { recoveryKey } = await onSetup(p1);
         setShownRecoveryKey(recoveryKey);
         return;
       }
@@ -69,41 +83,39 @@ export function VaultModal({
     return (
       <div className="fixed inset-0 z-[60] grid place-items-center bg-black/60 backdrop-blur-sm p-4">
         <form
-            className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0B0D12] p-5 shadow-2xl"
-            onSubmit={(e) => {
-                e.preventDefault();
-                submit();
-            }}
-            >
+          className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0B0D12] p-5 shadow-2xl"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submit();
+          }}
+        >
           <h2 className="text-sm font-semibold">{UI.saveRecoveryKeyPrompt}</h2>
           <p className="mt-2 text-xs text-zinc-400 leading-relaxed">
             {UI.recoveryKeyExplanation}
           </p>
 
-            <div className="relative mt-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 font-mono text-xs text-zinc-100 break-all">
+          <div className="relative mt-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 font-mono text-xs text-zinc-100 break-all">
             <button
-                type="button"
-                onClick={async () => {
+              type="button"
+              onClick={async () => {
                 try {
-                    await navigator.clipboard.writeText(shownRecoveryKey);
-                    setCopied(true);
-                    window.setTimeout(() => setCopied(false), 1200);
+                  await navigator.clipboard.writeText(shownRecoveryKey);
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1200);
                 } catch {
-                    // Fallback: select text prompt
-                    setCopied(false);
-                    alert(UI.copyFailedAlert);
+                  setCopied(false);
+                  alert(UI.copyFailedAlert);
                 }
-                }}
-                className="absolute right-2 top-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-200 hover:bg-white/[0.06]"
-                aria-label={UI.ariaCopyRecoveryKey}
-                title={UI.copy}
+              }}
+              className="absolute right-2 top-2 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[11px] text-zinc-200 hover:bg-white/[0.06]"
+              aria-label={UI.ariaCopyRecoveryKey}
+              title={UI.copy}
             >
-                {copied ? UI.copied : UI.copy}
+              {copied ? UI.copied : UI.copy}
             </button>
 
             {shownRecoveryKey}
-            </div>
-
+          </div>
 
           <label className="mt-3 flex items-start gap-2 text-xs text-zinc-300">
             <input
@@ -119,18 +131,17 @@ export function VaultModal({
             type="button"
             disabled={!confirmedSaved}
             onClick={() => {
-                setShownRecoveryKey(null);
-                onRecoveryDone?.();
+              setShownRecoveryKey(null);
+              onRecoveryDone?.();
             }}
             className={
-                confirmedSaved
+              confirmedSaved
                 ? "mt-4 w-full rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
                 : "mt-4 w-full rounded-xl bg-white/[0.08] px-4 py-2 text-sm font-semibold text-zinc-400 cursor-not-allowed"
             }
-            >
+          >
             {UI.continue}
-            </button>
-
+          </button>
         </form>
       </div>
     );
@@ -141,10 +152,10 @@ export function VaultModal({
       <form
         className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0B0D12] p-5 shadow-2xl"
         onSubmit={(e) => {
-            e.preventDefault();
-            submit();
+          e.preventDefault();
+          submit();
         }}
-        >
+      >
         <div className="text-sm font-semibold">{title}</div>
         <p className="mt-2 text-xs text-zinc-400 leading-relaxed">
           {mode === "setup"
@@ -152,57 +163,83 @@ export function VaultModal({
             : "Enter your passphrase to decrypt notes (this session only)."}
         </p>
 
-        <div className="mt-4 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setUseRecovery(false)}
-            className={
-              !useRecovery
-                ? "rounded-xl bg-white/[0.08] px-3 py-2 text-xs text-zinc-100"
-                : "rounded-xl px-3 py-2 text-xs text-zinc-300 hover:text-zinc-100"
-            }
-          >
-            {UI.passphrase}
-          </button>
-          <button
-            type="button"
-            onClick={() => setUseRecovery(true)}
-            className={
-              useRecovery
-                ? "rounded-xl bg-white/[0.08] px-3 py-2 text-xs text-zinc-100"
-                : "rounded-xl px-3 py-2 text-xs text-zinc-300 hover:text-zinc-100"
-            }
-          >
-            {UI.recoveryKey}
-          </button>
-        </div>
-
-        {!useRecovery ? (
-          <input
-            autoFocus
-            aria-label={UI.passphrase}
-            type="password"
-            value={passphrase}
-            onChange={(e) => setPassphrase(e.target.value)}
-            placeholder={mode === "setup" ? "New passphrase" : "Passphrase"}
-            className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
-          />
+        {/* SETUP: passphrase + confirm, no toggle */}
+        {mode === "setup" ? (
+          <>
+            <input
+              autoFocus
+              aria-label="New passphrase"
+              type="password"
+              value={newPassphrase}
+              onChange={(e) => setNewPassphrase(e.target.value)}
+              placeholder="New passphrase"
+              className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
+            />
+            <input
+              aria-label="Confirm passphrase"
+              type="password"
+              value={confirmPassphrase}
+              onChange={(e) => setConfirmPassphrase(e.target.value)}
+              placeholder="Confirm new passphrase"
+              className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
+            />
+          </>
         ) : (
-          <input
-            value={recoveryKey}
-            onChange={(e) => setRecoveryKey(e.target.value)}
-            placeholder="Recovery key"
-            className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
-          />
+          <>
+            {/* UNLOCK: toggle between passphrase / recovery key */}
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setUseRecovery(false)}
+                className={
+                  !useRecovery
+                    ? "rounded-xl bg-white/[0.08] px-3 py-2 text-xs text-zinc-100"
+                    : "rounded-xl px-3 py-2 text-xs text-zinc-300 hover:text-zinc-100"
+                }
+              >
+                {UI.passphrase}
+              </button>
+              <button
+                type="button"
+                onClick={() => setUseRecovery(true)}
+                className={
+                  useRecovery
+                    ? "rounded-xl bg-white/[0.08] px-3 py-2 text-xs text-zinc-100"
+                    : "rounded-xl px-3 py-2 text-xs text-zinc-300 hover:text-zinc-100"
+                }
+              >
+                {UI.recoveryKey}
+              </button>
+            </div>
+
+            {!useRecovery ? (
+              <input
+                autoFocus
+                aria-label={UI.passphrase}
+                type="password"
+                value={passphrase}
+                onChange={(e) => setPassphrase(e.target.value)}
+                placeholder="Passphrase"
+                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
+              />
+            ) : (
+              <input
+                value={recoveryKey}
+                onChange={(e) => setRecoveryKey(e.target.value)}
+                placeholder="Recovery key"
+                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
+              />
+            )}
+          </>
         )}
 
         {err && <div className="mt-2 text-xs text-red-300">{err}</div>}
 
         <button
-            type="submit"
-            className="mt-4 w-full rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-            >
-            {mode === "setup" ? "Create vault" : "Unlock"}
+          type="submit"
+          className="mt-4 w-full rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+        >
+          {mode === "setup" ? "Create vault" : "Unlock"}
         </button>
       </form>
     </div>
