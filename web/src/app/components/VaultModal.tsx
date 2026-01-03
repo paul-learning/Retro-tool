@@ -58,7 +58,7 @@ function toneClasses(tone: Tone) {
   }
 }
 
-/* ───────────────────────────────────────────── */
+/* ───────────────────────────────────────────── update */
 
 export function VaultModal({
   mode, // "setup" | "unlock"
