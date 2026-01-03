@@ -2,12 +2,13 @@ import { test, expect } from "@playwright/test";
 
 async function setupVaultAndCloseRecovery(page: any, pass = "correct-password") {
   await expect(page.getByRole("button", { name: /^create vault$/i })).toBeVisible();
-  await page.getByLabel(/passphrase/i).fill(pass);
+  await page.getByPlaceholder(/12\+ characters/i).fill(pass);
+  await page.getByPlaceholder(/re-enter passphrase/i).fill(pass);
   await page.getByRole("button", { name: /^create vault$/i }).click();
 
   const continueBtn = page.getByRole("button", { name: /^continue$/i });
   await expect(continueBtn).toBeVisible();
-  await page.getByRole("checkbox", { name: /i have saved/i }).check();
+  await page.getByRole("checkbox").check();
   await continueBtn.click();
 
   await expect(page.getByRole("button", { name: /^create vault$/i })).toHaveCount(0);
@@ -38,7 +39,7 @@ test("vault stays locked with wrong password", async ({ page, browserName }) => 
     test.skip(true, `Vault not locked after reload in ${browserName} (likely IndexedDB timing/dev reload).`);
   }
 
-  await page.getByLabel(/passphrase/i).fill("wrong-password");
+  await page.getByRole("textbox", { name: /^passphrase$/i }).fill("wrong-password");
   await unlockBtn.click();
 
   await expect(page.getByText(/unlock failed/i)).toBeVisible();

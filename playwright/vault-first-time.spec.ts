@@ -13,8 +13,13 @@ test("first-time: can create vault and reach unlocked app", async ({ browser }) 
 
   await expect(page.getByText(/create vault/i)).toBeVisible();
 
-  await page.getByLabel(/passphrase/i).fill("correct-password");
+  const pass = "correct-password";
+
+  await page.getByPlaceholder(/12\+ characters/i).fill(pass);
+  await page.getByPlaceholder(/re-enter passphrase/i).fill(pass);
+
   await page.getByRole("button", { name: /create vault/i }).click();
+
 
   await expect(
   page.getByRole("heading", { name: /^save your recovery key$/i })
