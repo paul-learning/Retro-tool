@@ -6,6 +6,13 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
 
+// ✅ Tables
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TableCell } from "@tiptap/extension-table-cell";
+
+
 function fmt(ts: number) {
   return new Intl.DateTimeFormat(undefined, {
     year: "numeric",
@@ -80,6 +87,7 @@ export function EditNoteModal<TDraft extends BaseDraft>({
     bulletList: false,
     blockquote: false,
     h1: false,
+    table: false,
   });
 
   const editor = useEditor({
@@ -97,6 +105,17 @@ export function EditNoteModal<TDraft extends BaseDraft>({
           rel: "noopener noreferrer",
         },
       }),
+
+      // ✅ Table support
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: "tiptap-table",
+        },
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
 
     // initial content (we also setContent on open below)
@@ -148,6 +167,7 @@ export function EditNoteModal<TDraft extends BaseDraft>({
       bulletList: nodeOn("bulletList"),
       blockquote: nodeOn("blockquote"),
       h1: nodeOn("heading", { level: 1 }),
+      table: nodeOn("table"),
     });
   }
 
@@ -224,6 +244,19 @@ export function EditNoteModal<TDraft extends BaseDraft>({
   const onBullets = () => editor?.chain().focus().clearNodes().toggleBulletList().run();
   const onQuote = () => editor?.chain().focus().clearNodes().toggleBlockquote().run();
   const onH1 = () => editor?.chain().focus().clearNodes().toggleHeading({ level: 1 }).run();
+
+  // ✅ table actions
+  const onInsertTable = () => {
+    if (!editor) return;
+    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+    requestAnimationFrame(() => syncToolbar(editor));
+  };
+
+  const onDeleteTable = () => {
+    if (!editor) return;
+    editor.chain().focus().deleteTable().run();
+    requestAnimationFrame(() => syncToolbar(editor));
+  };
 
   // link actions
   const canLinkNow = editor ? !editor.state.selection.empty : false;
@@ -315,6 +348,27 @@ export function EditNoteModal<TDraft extends BaseDraft>({
               title="Bulleted list"
             >
               •
+            </button>
+
+            {/* ✅ Table insert / delete */}
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onInsertTable}
+              className={toolBtn(false)}
+              title="Insert table (3×3)"
+            >
+              ⊞
+            </button>
+
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onDeleteTable}
+              className={toolbar.table ? toolBtn(true) : toolBtn(false) + " opacity-60"}
+              title="Delete table (when cursor is in a table)"
+            >
+              ⊟
             </button>
 
             <button
