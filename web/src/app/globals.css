@@ -193,3 +193,119 @@ body {
   font-size: 0.75em;
   opacity: 0.6;
 }
+/* ✅ Tiptap tables — style the actual elements, not just a class */
+.tiptap table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.tiptap td,
+.tiptap th {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 8px;
+  vertical-align: top;
+}
+
+.tiptap th {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+}
+
+.tiptap td p,
+.tiptap th p {
+  margin: 0;
+}
+/* Fallback for rendered note previews */
+.note-card table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.note-card td,
+.note-card th {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 6px;
+}
+/* ---- Tiptap table resize handles ---- */
+.tiptap table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed; /* makes resizing feel consistent */
+}
+
+.tiptap th,
+.tiptap td {
+  position: relative; /* required for resize handles */
+}
+
+/* the handle element Tiptap adds */
+.tiptap .column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 4px;
+  height: 100%;
+  pointer-events: none;
+  background: rgba(99, 102, 241, 0.35); /* subtle indigo */
+}
+
+/* cursor while resizing */
+.tiptap .resize-cursor {
+  cursor: col-resize;
+}
+/* ---- Tiptap tables (editor + preview) ---- */
+.tiptap table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+/* ✅ Tables in clamped card previews */
+.tiptapPreview table {
+  border-collapse: collapse;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.tiptapPreview td,
+.tiptapPreview th {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 6px;
+  vertical-align: middle;
+}
+
+.tiptapPreview th {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+}
+
+.tiptapPreview td p,
+.tiptapPreview th p {
+  margin: 0;
+}
+
+/* Optional: if Tiptap wraps tables in a .tableWrapper */
+.tiptapPreview .tableWrapper {
+  overflow-x: auto;
+}
+
+
+.tiptap td,
+.tiptap th {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 8px;
+  vertical-align: middle; /* centers nicely */
+}
+
+.tiptap th {
+  background: rgba(255, 255, 255, 0.06);
+  font-weight: 600;
+}
+
+.tiptap td p,
+.tiptap th p {
+  margin: 0; /* fixes “misaligned” look due to paragraph margins */
+}
+.tiptap .tableWrapper {
+  overflow-x: auto;
+}

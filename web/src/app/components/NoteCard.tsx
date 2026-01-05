@@ -7,6 +7,13 @@ import { generateHTML } from "@tiptap/html";
 import StarterKit from "@tiptap/starter-kit";
 import DOMPurify from "dompurify";
 
+//tables
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TableHeader } from "@tiptap/extension-table-header";
+
+
 type ChecklistItem = {
   id: string;
   text: string;
@@ -51,7 +58,16 @@ function tiptapDocFromPlainText(text: string) {
 
 function tiptapJSONToHTML(jsonString: string): string {
   const doc = tryParseTiptapDoc(jsonString) ?? tiptapDocFromPlainText(jsonString || "");
-  return generateHTML(doc, [StarterKit]);
+  return generateHTML(doc, [
+    StarterKit,
+    Table.configure({
+      // keep consistent with the editor if you want
+      HTMLAttributes: { class: "tiptap-table" },
+    }),
+    TableRow,
+    TableHeader,
+    TableCell,
+  ]);
 }
 
 function tryDecodeChecklist(text: string | null | undefined): ChecklistItem[] | null {
@@ -111,6 +127,7 @@ export function NoteCard({
 
     return () => ro.disconnect();
   }, [previewHtml, checklistItems]);
+  const hasTable = useMemo(() => previewHtml.includes("<table"), [previewHtml]);
 
   return (
     <article
@@ -128,12 +145,13 @@ export function NoteCard({
         {isChecklist ? (
           <div
             ref={bodyRef}
-            className="text-sm leading-relaxed text-zinc-100/90"
+            className="tiptapPreview text-sm leading-relaxed text-zinc-100/90"
             style={{
               overflow: "hidden",
               display: "-webkit-box",
               WebkitBoxOrient: "vertical" as any,
               WebkitLineClamp: 6,
+              maxHeight: "9.75rem",
             }}
           >
             {(() => {
@@ -168,14 +186,22 @@ export function NoteCard({
           <div
             ref={bodyRef}
             className="tiptapPreview text-sm leading-relaxed text-zinc-100/90"
-            style={{
-              overflow: "hidden",
-              display: "-webkit-box",
-              WebkitBoxOrient: "vertical" as any,
-              WebkitLineClamp: 6,
-            }}
+            style={
+              hasTable
+                ? {
+                    overflow: "hidden",
+                    maxHeight: "9.75rem",
+                  }
+                : {
+                    overflow: "hidden",
+                    display: "-webkit-box",
+                    WebkitBoxOrient: "vertical" as any,
+                    WebkitLineClamp: 6,
+                  }
+            }
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
+
         )}
 
         {isOverflowing && (

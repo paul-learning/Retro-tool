@@ -83,7 +83,8 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
 
   const items = useMemo(() => sortKeepStyle(normalizeItems(draft.items)), [draft.items]);
 
-  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const inputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+
 
   const [originalDraft, setOriginalDraft] = useState<TDraft | null>(null);
   const [restoreIndex, setRestoreIndex] = useState<PinMap>({});
@@ -543,7 +544,7 @@ function DesktopRow({
   item: ChecklistItem;
   idx: number;
   items: ChecklistItem[];
-  inputRefs: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
+  inputRefs: React.MutableRefObject<Record<string, HTMLTextAreaElement | null>>;
   setItem: (id: string, patch: Partial<ChecklistItem>) => void;
   addItemAfter: (afterId?: string) => void;
   removeItem: (id: string) => void;
@@ -576,43 +577,45 @@ function DesktopRow({
         {it.checked ? "✓" : ""}
       </button>
 
-      <input
+      <textarea
         ref={(el) => {
           inputRefs.current[it.id] = el;
+          if (el) {
+            // auto-size on mount
+            el.style.height = "0px";
+            el.style.height = el.scrollHeight + "px";
+          }
         }}
         value={it.text}
-        onChange={(e) => setItem(it.id, { text: e.target.value })}
+        onChange={(e) => {
+          setItem(it.id, { text: e.target.value });
+
+          // auto-size on every change
+          const el = e.currentTarget;
+          el.style.height = "0px";
+          el.style.height = el.scrollHeight + "px";
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter") {
-            e.preventDefault();
+            e.preventDefault(); // keep "Enter adds a new item"
             addItemAfter(it.id);
           }
           if (e.key === "Backspace" && isEmpty && items.length > 1) {
             e.preventDefault();
             removeItem(it.id);
           }
-          if (e.key === "ArrowUp") {
-            const prev = items[idx - 1];
-            if (prev) {
-              e.preventDefault();
-              inputRefs.current[prev.id]?.focus();
-            }
-          }
-          if (e.key === "ArrowDown") {
-            const next = items[idx + 1];
-            if (next) {
-              e.preventDefault();
-              inputRefs.current[next.id]?.focus();
-            }
-          }
         }}
         placeholder={idx === 0 ? "List item…" : ""}
+        rows={1}
         className={[
-          "flex-1 rounded-lg border border-white/0 bg-transparent px-2 py-1 text-sm outline-none",
+          "flex-1 rounded-lg border border-white/0 bg-transparent px-2 py-2 text-sm outline-none",
           "focus:border-white/10 focus:bg-white/[0.02] focus:ring-2 focus:ring-indigo-500/20",
+          "resize-none overflow-hidden",
+          "leading-relaxed", // nicer wrapping
           it.checked ? "text-zinc-400 line-through" : "text-zinc-100",
         ].join(" ")}
       />
+
 
       {/* Drag handle: desktop only, but still make it robust */}
       <button

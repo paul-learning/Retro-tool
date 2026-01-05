@@ -1,10 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { UI } from "../uiStrings";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
+
+// ✅ Tables (named exports for Turbopack)
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TableCell } from "@tiptap/extension-table-cell";
+
+// ✅ Needed so right-click selects the clicked cell before we check isActive("table")
+import { TextSelection } from "prosemirror-state";
 
 function fmt(ts: number) {
   return new Intl.DateTimeFormat(undefined, {
@@ -50,7 +59,6 @@ function tiptapDocFromPlainText(text: string) {
   };
 }
 
-// ✅ Generic: works with your unified Draft as long as it has title/text.
 type BaseDraft = { title: string; text: string };
 
 export function EditNoteModal<TDraft extends BaseDraft>({
@@ -72,6 +80,14 @@ export function EditNoteModal<TDraft extends BaseDraft>({
   const [linkUrl, setLinkUrl] = useState("");
   const [hasEditorFocus, setHasEditorFocus] = useState(false);
 
+  // ✅ Table context menu state
+  const [tableMenu, setTableMenu] = useState<{ open: boolean; x: number; y: number }>({
+    open: false,
+    x: 0,
+    y: 0,
+  });
+  const closeTableMenu = () => setTableMenu((m) => ({ ...m, open: false }));
+
   const [toolbar, setToolbar] = useState({
     bold: false,
     italic: false,
@@ -80,10 +96,10 @@ export function EditNoteModal<TDraft extends BaseDraft>({
     bulletList: false,
     blockquote: false,
     h1: false,
+    table: false,
   });
 
   const editor = useEditor({
-    // ✅ fixes Next/Tiptap SSR hydration mismatch runtime error
     immediatelyRender: false,
 
     extensions: [
@@ -97,9 +113,19 @@ export function EditNoteModal<TDraft extends BaseDraft>({
           rel: "noopener noreferrer",
         },
       }),
+
+      // ✅ Table support
+      Table.configure({
+        resizable: true,
+        HTMLAttributes: {
+          class: "tiptap-table",
+        },
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
 
-    // initial content (we also setContent on open below)
     content: tryParseTiptapJSON(draft.text) ?? tiptapDocFromPlainText(draft.text || ""),
 
     editorProps: {
@@ -107,13 +133,51 @@ export function EditNoteModal<TDraft extends BaseDraft>({
         class:
           "tiptap min-h-[220px] w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20",
       },
+
+      // ✅ Right-click menu that ONLY triggers inside tables.
+      // Important: right-click doesn't move selection by default, so we move it manually first.
+      handleDOMEvents: {
+        contextmenu: (view, event) => {
+          const e = event as MouseEvent;
+
+          // Figure out the doc position at click coords
+          const hit = view.posAtCoords({ left: e.clientX, top: e.clientY });
+          if (!hit) return false; // let browser menu happen
+
+          // Move selection to where user right-clicked, then focus editor
+          const tr = view.state.tr.setSelection(
+            TextSelection.near(view.state.doc.resolve(hit.pos))
+          );
+          view.dispatch(tr);
+          view.focus();
+
+          // Now the editor's "active" state reflects the clicked cell/node
+          const isInTable = !!editor?.isActive("table");
+          if (!isInTable) return false; // outside table => keep browser menu
+
+          // Inside table => suppress browser menu and open ours
+          e.preventDefault();
+
+          // Clamp menu to viewport so it doesn't go off-screen
+          const MENU_W = 240;
+          const MENU_H = 360;
+          const pad = 8;
+          const vw = window.innerWidth;
+          const vh = window.innerHeight;
+
+          const x = Math.min(Math.max(e.clientX, pad), vw - MENU_W - pad);
+          const y = Math.min(Math.max(e.clientY, pad), vh - MENU_H - pad);
+
+          setTableMenu({ open: true, x, y });
+          return true; // handled
+        },
+      },
     },
 
     onUpdate: ({ editor }) => {
       setDraft((d) => ({ ...d, text: JSON.stringify(editor.getJSON()) }));
       syncToolbar(editor);
     },
-
     onSelectionUpdate: ({ editor }) => syncToolbar(editor),
     onTransaction: ({ editor }) => syncToolbar(editor),
 
@@ -148,6 +212,7 @@ export function EditNoteModal<TDraft extends BaseDraft>({
       bulletList: nodeOn("bulletList"),
       blockquote: nodeOn("blockquote"),
       h1: nodeOn("heading", { level: 1 }),
+      table: nodeOn("table"),
     });
   }
 
@@ -163,12 +228,12 @@ export function EditNoteModal<TDraft extends BaseDraft>({
     prevOpen.current = open;
   }, [editor, open, draft.text]);
 
-  // Dirty detection snapshot
+  // Dirty snapshot
   const [originalDraft, setOriginalDraft] = useState<{ title: string; text: string } | null>(null);
   useEffect(() => {
     if (!open) return;
     setOriginalDraft({ title: draft.title, text: draft.text });
-  }, [open]); // intentionally only on open
+  }, [open]); // only on open
 
   const isDirty =
     originalDraft !== null &&
@@ -181,10 +246,17 @@ export function EditNoteModal<TDraft extends BaseDraft>({
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
+
         if (linkModalOpen) {
           setLinkModalOpen(false);
           return;
         }
+
+        if (tableMenu.open) {
+          closeTableMenu();
+          return;
+        }
+
         onClose();
         return;
       }
@@ -199,7 +271,7 @@ export function EditNoteModal<TDraft extends BaseDraft>({
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose, onCommit, isDirty, linkModalOpen]);
+  }, [open, onClose, onCommit, isDirty, linkModalOpen, tableMenu.open]);
 
   if (!open) return null;
 
@@ -213,19 +285,35 @@ export function EditNoteModal<TDraft extends BaseDraft>({
         : "bg-white/[0.03]",
     ].join(" ");
 
+  const toolBtnDisabled = (active: boolean) =>
+    toolBtn(active) + " opacity-50 cursor-not-allowed hover:bg-white/[0.03]";
+
+  // ---- formatting actions ----
   const onBold = () => {
     if (!editor) return;
     editor.chain().focus().toggleBold().run();
     requestAnimationFrame(() => syncToolbar(editor));
   };
-
   const onItalic = () => editor?.chain().focus().toggleItalic().run();
   const onCode = () => editor?.chain().focus().toggleCode().run();
   const onBullets = () => editor?.chain().focus().clearNodes().toggleBulletList().run();
   const onQuote = () => editor?.chain().focus().clearNodes().toggleBlockquote().run();
   const onH1 = () => editor?.chain().focus().clearNodes().toggleHeading({ level: 1 }).run();
 
-  // link actions
+  // ---- table insert ----
+  const onInsertTable = () => {
+    if (!editor) return;
+    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+    requestAnimationFrame(() => syncToolbar(editor));
+  };
+
+  const runTableCmd = (fn: () => void) => {
+    fn();
+    closeTableMenu();
+    requestAnimationFrame(() => syncToolbar(editor));
+  };
+
+  // ---- link actions ----
   const canLinkNow = editor ? !editor.state.selection.empty : false;
 
   const onLink = () => {
@@ -259,22 +347,26 @@ export function EditNoteModal<TDraft extends BaseDraft>({
   return (
     <div
       className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm"
-      onMouseDown={() => onClose()}
+      onMouseDown={() => {
+        if (tableMenu.open) closeTableMenu();
+        onClose();
+      }}
     >
       <div
-        className="mt-24 w-full max-w-xl rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col max-h-[calc(100vh-8rem)] overflow-hidden"
-        onMouseDown={(e) => e.stopPropagation()}
+        className="mt-24 w-[95vw] sm:w-[90vw] lg:w-[80vw] max-w-[80vw] rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col max-h-[calc(100vh-8rem)] overflow-hidden"
+        onMouseDown={(e) => {
+          e.stopPropagation();
+          if (tableMenu.open) closeTableMenu();
+        }}
       >
         <input
           value={draft.title}
           onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
           placeholder={UI.titlePlaceholder ?? "Title"}
-          className="w-full rounded-xl border border-white/10 bg-white/[0.04]
-                  px-3 py-2 text-sm text-zinc-100 outline-none
-                  focus:ring-4 focus:ring-indigo-500/20"
+          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
         />
 
-        {/* Toolbar */}
+        {/* Toolbar (kept small) */}
         <div className="mt-3 flex items-center justify-between gap-2">
           <div className="flex flex-wrap gap-1">
             <button
@@ -319,19 +411,6 @@ export function EditNoteModal<TDraft extends BaseDraft>({
 
             <button
               type="button"
-              disabled={!canLinkNow}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onLink}
-              className={
-                canLinkNow ? toolBtn(toolbar.link) : toolBtn(false) + " opacity-50 cursor-not-allowed"
-              }
-              title="Link"
-            >
-              🔗
-            </button>
-
-            <button
-              type="button"
               onMouseDown={(e) => e.preventDefault()}
               onClick={onQuote}
               className={toolBtn(toolbar.blockquote)}
@@ -349,15 +428,99 @@ export function EditNoteModal<TDraft extends BaseDraft>({
             >
               H
             </button>
+
+            {/* ✅ Keep just "insert table" in main toolbar */}
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onInsertTable}
+              className={toolBtn(false)}
+              title="Insert table (3×3)"
+            >
+              ⊞
+            </button>
+
+            <button
+              type="button"
+              disabled={!canLinkNow}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={onLink}
+              className={canLinkNow ? toolBtn(toolbar.link) : toolBtnDisabled(false)}
+              title="Link"
+            >
+              🔗
+            </button>
           </div>
 
-          {/* tiny focus hint (optional, feels “Keep”-ish) */}
           <div className="text-[11px] text-zinc-500">{hasEditorFocus ? "Editing…" : ""}</div>
         </div>
 
         {/* Editor */}
-        <div className="mt-3 max-h-[360px] overflow-y-auto rounded-xl">
+        <div className="mt-3 max-h-[360px] overflow-y-auto rounded-xl relative">
           <EditorContent editor={editor} />
+
+          {/* ✅ Table context menu (opens only when right-click is inside a table) */}
+          {tableMenu.open && editor && editor.isActive("table") && (
+            <div
+              className="fixed z-[70]"
+              style={{ left: tableMenu.x, top: tableMenu.y }}
+              onMouseDown={(e) => e.stopPropagation()}
+            >
+              <div className="w-60 rounded-xl border border-white/10 bg-[#0B0D12] shadow-2xl overflow-hidden">
+                <div className="px-3 py-2 text-[11px] text-zinc-400 border-b border-white/10">
+                  Table options
+                </div>
+
+                <MenuItem
+                  label="Add row above"
+                  onClick={() => runTableCmd(() => editor.chain().focus().addRowBefore().run())}
+                />
+                <MenuItem
+                  label="Add row below"
+                  onClick={() => runTableCmd(() => editor.chain().focus().addRowAfter().run())}
+                />
+
+                <div className="h-px bg-white/10 my-1" />
+
+                <MenuItem
+                  label="Add column left"
+                  onClick={() => runTableCmd(() => editor.chain().focus().addColumnBefore().run())}
+                />
+                <MenuItem
+                  label="Add column right"
+                  onClick={() => runTableCmd(() => editor.chain().focus().addColumnAfter().run())}
+                />
+
+                <div className="h-px bg-white/10 my-1" />
+
+                <MenuItem
+                  label="Delete row"
+                  danger
+                  onClick={() => runTableCmd(() => editor.chain().focus().deleteRow().run())}
+                />
+                <MenuItem
+                  label="Delete column"
+                  danger
+                  onClick={() => runTableCmd(() => editor.chain().focus().deleteColumn().run())}
+                />
+
+                <div className="h-px bg-white/10 my-1" />
+
+                <MenuItem
+                  label="Toggle header row"
+                  onClick={() => runTableCmd(() => editor.chain().focus().toggleHeaderRow().run())}
+                />
+
+                <div className="h-px bg-white/10 my-1" />
+
+                <MenuItem
+                  label="Delete table"
+                  danger
+                  onClick={() => runTableCmd(() => editor.chain().focus().deleteTable().run())}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {meta && (
@@ -390,9 +553,7 @@ export function EditNoteModal<TDraft extends BaseDraft>({
                 value={linkUrl}
                 onChange={(e) => setLinkUrl(e.target.value)}
                 placeholder="https://example.com"
-                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04]
-                          px-3 py-2 text-sm text-zinc-100 outline-none
-                          focus:ring-4 focus:ring-indigo-500/20"
+                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
@@ -438,7 +599,10 @@ export function EditNoteModal<TDraft extends BaseDraft>({
         {/* Footer buttons */}
         <div className="mt-4 flex items-center justify-between">
           <button
-            onClick={onClose}
+            onClick={() => {
+              if (tableMenu.open) closeTableMenu();
+              onClose();
+            }}
             className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06]"
           >
             {UI.cancel}
@@ -462,5 +626,30 @@ export function EditNoteModal<TDraft extends BaseDraft>({
         </div>
       </div>
     </div>
+  );
+}
+
+function MenuItem({
+  label,
+  onClick,
+  danger,
+}: {
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className={[
+        "w-full text-left px-3 py-2 text-sm transition",
+        "hover:bg-white/[0.06]",
+        danger ? "text-rose-300 hover:text-rose-200" : "text-zinc-200",
+      ].join(" ")}
+    >
+      {label}
+    </button>
   );
 }
