@@ -309,3 +309,5 @@ body {
 .tiptap .tableWrapper {
   overflow-x: auto;
 }
+:root { color-scheme: dark; }
+html, body { background: #0a0a0a; }
