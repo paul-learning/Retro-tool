@@ -176,9 +176,18 @@ const [showUnlock, setShowUnlock] = useState(false);
         }
         await onUnlockPassphrase(passphrase);
       }
-    } catch {
-      setErr(UI.unlockFailedAlert);
-    }
+        } catch (e) {
+          console.error("[VaultModal] submit failed:", e);
+
+          // show a helpful message in dev, generic in prod
+          const msg =
+            process.env.NODE_ENV !== "production"
+              ? (e instanceof Error ? e.message : String(e))
+              : UI.unlockFailedAlert;
+
+          setErr(msg || UI.unlockFailedAlert);
+        }
+
   }
 
   /* ───── Recovery key screen (unchanged logic) ───── */
