@@ -69,6 +69,7 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
   onClose: () => void;
   meta: { createdAt: number; updatedAt: number } | null;
 }) {
+  {/*
   // Detect touch / mobile-ish pointers (no drag reorder there)
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
   useEffect(() => {
@@ -78,7 +79,7 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
     apply();
     mq?.addEventListener?.("change", apply);
     return () => mq?.removeEventListener?.("change", apply);
-  }, []);
+  }, []); */}
 
   const items = useMemo(() => sortKeepStyle(normalizeItems(draft.items)), [draft.items]);
 
@@ -327,6 +328,22 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
         <div className="mt-3 max-h-[420px] overflow-y-auto overscroll-contain rounded-xl border border-white/10 bg-white/[0.02]">
           <div className="p-2">
             <LayoutGroup>
+              <Reorder.Group axis="y" values={items} onReorder={onReorder}>
+                {items.map((it, idx) => (
+                  <DesktopRow
+                    key={it.id}
+                    item={it}
+                    idx={idx}
+                    items={items}
+                    inputRefs={inputRefs}
+                    setItem={setItem}
+                    addItemAfter={addItemAfter}
+                    removeItem={removeItem}
+                    toggleChecked={() => toggleCheckedKeepRestore(it.id)}
+                  />
+                ))}
+              </Reorder.Group>
+              {/*
               {isCoarsePointer ? (
                 // ✅ Mobile: no drag; “arm” + move buttons
                 <div>
@@ -455,7 +472,7 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
                     />
                   ))}
                 </Reorder.Group>
-              )}
+              )}*/}
             </LayoutGroup>
 
             {/* You commented this out — keeping it out (leave commented if you want it slick) */}
