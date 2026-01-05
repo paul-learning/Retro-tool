@@ -604,13 +604,13 @@ function DesktopRow({
           e.preventDefault();
           controls.start(e);
         }}
-        className="opacity-0 group-hover:opacity-100 transition text-zinc-300 hover:text-white rounded-lg px-2 py-1 cursor-grab active:cursor-grabbing touch-none select-none"
+        className="transition text-zinc-300 hover:text-white rounded-lg px-2 py-1 cursor-grab active:cursor-grabbing touch-none select-none"
         title="Drag to reorder"
         aria-label="Drag to reorder"
       >
         ≡
       </button>
-
+{/*
       <button
         type="button"
         onClick={() => addItemAfter(it.id)}
@@ -619,13 +619,13 @@ function DesktopRow({
       >
         +
       </button>
-
+*/}
       <button
         type="button"
         onClick={() =>
           items.length > 1 ? removeItem(it.id) : setItem(it.id, { text: "", checked: false })
         }
-        className="opacity-0 group-hover:opacity-100 transition text-zinc-300 hover:text-white rounded-lg px-2 py-1"
+        className="transition text-zinc-300 hover:text-white rounded-lg px-2 py-1"
         title="Remove item"
       >
         ×
