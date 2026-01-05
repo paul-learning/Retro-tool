@@ -208,54 +208,56 @@ export function EditChecklistModal<TDraft extends BaseChecklistDraft>({
     setArmedId((v) => (v === id ? null : v));
   };
 
-  // ✅ check/uncheck: check -> bottom, uncheck -> restore old unchecked position
-  const toggleCheckedKeepRestore = (id: string) => {
-    setDraft((d) => {
-      const current = normalizeItems(d.items);
-      const idx = current.findIndex((x) => x.id === id);
-      if (idx === -1) return d;
+// ✅ check/uncheck: check -> bottom, uncheck -> restore old unchecked position
+const toggleCheckedKeepRestore = (id: string) => {
+  const current = normalizeItems(draft.items);
+  const idx = current.findIndex((x) => x.id === id);
+  if (idx === -1) return;
 
-      const item = current[idx];
-      const willBeChecked = !item.checked;
+  const item = current[idx];
+  const willBeChecked = !item.checked;
 
-      const rendered = sortKeepStyle(current);
-      const uncheckedRendered = rendered.filter((x) => !x.checked);
-      const uncheckedIndexNow = uncheckedRendered.findIndex((x) => x.id === id);
+  // rendered view (unchecked then checked)
+  const rendered = sortKeepStyle(current);
+  const uncheckedRendered = rendered.filter((x) => !x.checked);
+  const uncheckedIndexNow = uncheckedRendered.findIndex((x) => x.id === id);
 
-      if (willBeChecked) {
-        setRestoreIndex((m) => ({
-          ...m,
-          [id]: uncheckedIndexNow === -1 ? uncheckedRendered.length : uncheckedIndexNow,
-        }));
-      }
+  // compute next items
+  const updated: ChecklistItem = { ...item, checked: willBeChecked };
+  const without = current.filter((x) => x.id !== id);
 
-      const updated: ChecklistItem = { ...item, checked: willBeChecked };
-      const without = current.filter((x) => x.id !== id);
+  const unchecked = without.filter((x) => !x.checked);
+  const checked = without.filter((x) => x.checked);
 
-      const unchecked = without.filter((x) => !x.checked);
-      const checked = without.filter((x) => x.checked);
+  let next: ChecklistItem[];
 
-      let next: ChecklistItem[];
+  if (willBeChecked) {
+    // remember where it was in the unchecked section (so we can restore later)
+    setRestoreIndex((m) => ({
+      ...m,
+      [id]: uncheckedIndexNow === -1 ? uncheckedRendered.length : uncheckedIndexNow,
+    }));
 
-      if (willBeChecked) {
-        next = [...unchecked, ...checked, updated];
-      } else {
-        const desired = restoreIndex[id];
-        const insertAt =
-          typeof desired === "number" ? clamp(desired, 0, unchecked.length) : unchecked.length;
+    // checked items go to bottom
+    next = [...unchecked, ...checked, updated];
+  } else {
+    const desired = restoreIndex[id];
+    const insertAt =
+      typeof desired === "number" ? clamp(desired, 0, unchecked.length) : unchecked.length;
 
-        next = [...unchecked.slice(0, insertAt), updated, ...unchecked.slice(insertAt), ...checked];
+    next = [...unchecked.slice(0, insertAt), updated, ...unchecked.slice(insertAt), ...checked];
 
-        setRestoreIndex((m) => {
-          const { [id]: _, ...rest } = m;
-          return rest;
-        });
-      }
-
-      requestAnimationFrame(() => inputRefs.current[id]?.focus());
-      return { ...d, items: next };
+    // remove restore pin after restoring
+    setRestoreIndex((m) => {
+      const { [id]: _, ...rest } = m;
+      return rest;
     });
-  };
+  }
+
+  setDraft((d) => ({ ...d, items: next }));
+  requestAnimationFrame(() => inputRefs.current[id]?.focus());
+};
+
 
   // ✅ move within current rendered order (smooth layout anim)
   const moveInRenderedOrder = (id: string, dir: "up" | "down") => {
