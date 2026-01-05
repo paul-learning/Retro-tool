@@ -134,6 +134,7 @@ export function NoteCard({
               display: "-webkit-box",
               WebkitBoxOrient: "vertical" as any,
               WebkitLineClamp: 6,
+              maxHeight: "9.75rem",
             }}
           >
             {(() => {
