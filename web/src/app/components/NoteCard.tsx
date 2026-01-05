@@ -127,6 +127,7 @@ export function NoteCard({
 
     return () => ro.disconnect();
   }, [previewHtml, checklistItems]);
+  const hasTable = useMemo(() => previewHtml.includes("<table"), [previewHtml]);
 
   return (
     <article
@@ -185,14 +186,22 @@ export function NoteCard({
           <div
             ref={bodyRef}
             className="tiptapPreview text-sm leading-relaxed text-zinc-100/90"
-            style={{
-              overflow: "hidden",
-              display: "-webkit-box",
-              WebkitBoxOrient: "vertical" as any,
-              WebkitLineClamp: 6,
-            }}
+            style={
+              hasTable
+                ? {
+                    overflow: "hidden",
+                    maxHeight: "9.75rem",
+                  }
+                : {
+                    overflow: "hidden",
+                    display: "-webkit-box",
+                    WebkitBoxOrient: "vertical" as any,
+                    WebkitLineClamp: 6,
+                  }
+            }
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
+
         )}
 
         {isOverflowing && (
