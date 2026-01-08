@@ -130,8 +130,9 @@ export function EditNoteModal<TDraft extends BaseDraft>({
 
     editorProps: {
       attributes: {
+        // ✅ h-full so the editor surface can fill the available height
         class:
-          "tiptap min-h-[220px] w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20",
+          "tiptap h-full w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20",
       },
 
       // ✅ Right-click menu that ONLY triggers inside tables.
@@ -353,7 +354,8 @@ export function EditNoteModal<TDraft extends BaseDraft>({
       }}
     >
       <div
-        className="mt-24 w-[95vw] sm:w-[90vw] lg:w-[80vw] max-w-[80vw] rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col max-h-[calc(100vh-8rem)] overflow-hidden"
+        // ✅ 80% viewport height + min-h-0 so the editor can actually expand and scroll correctly
+        className="mt-24 w-[95vw] sm:w-[90vw] lg:w-[80vw] max-w-[80vw] h-[80vh] min-h-0 rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col overflow-hidden"
         onMouseDown={(e) => {
           e.stopPropagation();
           if (tableMenu.open) closeTableMenu();
@@ -455,9 +457,12 @@ export function EditNoteModal<TDraft extends BaseDraft>({
           <div className="text-[11px] text-zinc-500">{hasEditorFocus ? "Editing…" : ""}</div>
         </div>
 
-        {/* Editor */}
-        <div className="mt-3 max-h-[360px] overflow-y-auto rounded-xl relative">
-          <EditorContent editor={editor} />
+        {/* ✅ Editor fills remaining modal height */}
+        <div className="mt-3 flex-1 min-h-0 overflow-hidden rounded-xl relative flex">
+          {/* Scroll container */}
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <EditorContent editor={editor} className="h-full" />
+          </div>
 
           {/* ✅ Table context menu (opens only when right-click is inside a table) */}
           {tableMenu.open && editor && editor.isActive("table") && (
