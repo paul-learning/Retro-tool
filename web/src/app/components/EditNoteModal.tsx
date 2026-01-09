@@ -1,10 +1,12 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { UI } from "../uiStrings";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
+import { Extension } from "@tiptap/core";
+import Suggestion from "@tiptap/suggestion";
 
 // ✅ Tables (named exports for Turbopack)
 import { Table } from "@tiptap/extension-table";
@@ -38,13 +40,11 @@ function normalizeUrl(input: string) {
 }
 
 function tryParseTiptapJSON(s: string) {
-  if (!s) return null;
   try {
-    const parsed = JSON.parse(s);
-    return parsed && parsed.type === "doc" ? parsed : null;
-  } catch {
-    return null;
-  }
+    const j = JSON.parse(s);
+    if (j && typeof j === "object") return j;
+  } catch {}
+  return null;
 }
 
 function tiptapDocFromPlainText(text: string) {
@@ -58,6 +58,137 @@ function tiptapDocFromPlainText(text: string) {
     ],
   };
 }
+
+/* ---------------- Slash Command Extension ---------------- */
+
+type SlashItem = {
+  title: string;
+  keywords: string[];
+  command: (opts: { editor: any }) => void;
+};
+
+const SlashCommand = Extension.create({
+  name: "slash-command",
+  addProseMirrorPlugins() {
+    const items: SlashItem[] = [
+      {
+        title: "Heading 1",
+        keywords: ["h1", "heading", "title"],
+        command: ({ editor }) => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+      },
+      {
+        title: "Bulleted list",
+        keywords: ["bullet", "bullets", "list", "ul"],
+        command: ({ editor }) => editor.chain().focus().toggleBulletList().run(),
+      },
+      {
+        title: "Quote",
+        keywords: ["quote", "blockquote"],
+        command: ({ editor }) => editor.chain().focus().toggleBlockquote().run(),
+      },
+      {
+        title: "Code block",
+        keywords: ["code", "codeblock"],
+        command: ({ editor }) => editor.chain().focus().toggleCodeBlock().run(),
+      },
+      {
+        title: "Divider",
+        keywords: ["divider", "hr", "rule"],
+        command: ({ editor }) => editor.chain().focus().setHorizontalRule().run(),
+      },
+      {
+        title: "Table (3×3)",
+        keywords: ["table", "grid"],
+        command: ({ editor }) =>
+          editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+      },
+    ];
+
+    let popup: HTMLDivElement | null = null;
+
+    const ensurePopup = () => {
+      if (popup) return popup;
+      popup = document.createElement("div");
+      popup.className =
+        "z-[80] rounded-xl border border-white/10 bg-[#0B0D12] shadow-2xl p-1 text-sm";
+      document.body.appendChild(popup);
+      return popup;
+    };
+
+    const destroyPopup = () => {
+      popup?.remove();
+      popup = null;
+    };
+
+    type RenderProps = {
+      items: SlashItem[];
+      command: (item: SlashItem) => void;
+      clientRect?: (() => DOMRect | null) | null;
+    };
+
+    return [
+      Suggestion({
+        editor: this.editor,
+        char: "/",
+        startOfLine: false,
+        allowSpaces: false,
+        items: ({ query }: { query: string }) => {
+          const q = query.trim().toLowerCase();
+          if (!q) return items;
+          return items.filter((it) => {
+            if (it.title.toLowerCase().includes(q)) return true;
+            return it.keywords.some((k) => k.includes(q));
+          });
+        },
+        command: ({ editor, props }: { editor: any; props: SlashItem }) => {
+          props.command({ editor });
+        },
+        render: () => {
+          const updatePopup = (props: RenderProps) => {
+            const el = ensurePopup();
+            el.innerHTML = "";
+
+            props.items.forEach((item) => {
+              const row = document.createElement("button");
+              row.type = "button";
+              row.className =
+                "w-full text-left px-3 py-2 rounded-lg hover:bg-white/10 text-zinc-200";
+              row.textContent = item.title;
+              row.onmousedown = (e) => e.preventDefault();
+              row.onclick = () => props.command(item);
+              el.appendChild(row);
+            });
+
+            const rect = props.clientRect?.();
+            if (!rect) return;
+
+            el.style.position = "fixed";
+            el.style.left = `${Math.min(rect.left, window.innerWidth - 280)}px`;
+            el.style.top = `${Math.min(rect.bottom + 6, window.innerHeight - 200)}px`;
+            el.style.minWidth = "220px";
+            el.style.display = "block";
+          };
+
+          return {
+            onStart: (props: RenderProps) => {
+              ensurePopup();
+              updatePopup(props);
+            },
+            onUpdate: (props: RenderProps) => {
+              updatePopup(props);
+            },
+            onExit: () => {
+              destroyPopup();
+            },
+          };
+        },
+
+      }),
+    ];
+  },
+});
+
+/* ---------------- Component ---------------- */
 
 type BaseDraft = { title: string; text: string };
 
@@ -80,6 +211,13 @@ export function EditNoteModal<TDraft extends BaseDraft>({
   const [linkUrl, setLinkUrl] = useState("");
   const [hasEditorFocus, setHasEditorFocus] = useState(false);
 
+  // Bubble menu state (selection-based)
+  const [bubble, setBubble] = useState<{ open: boolean; x: number; y: number }>({
+    open: false,
+    x: 0,
+    y: 0,
+  });
+
   // ✅ Table context menu state
   const [tableMenu, setTableMenu] = useState<{ open: boolean; x: number; y: number }>({
     open: false,
@@ -93,16 +231,17 @@ export function EditNoteModal<TDraft extends BaseDraft>({
     italic: false,
     code: false,
     link: false,
-    bulletList: false,
-    blockquote: false,
     h1: false,
+    bullets: false,
+    quote: false,
+    codeBlock: false,
     table: false,
   });
 
   const editor = useEditor({
     immediatelyRender: false,
-
     extensions: [
+      SlashCommand,
       StarterKit,
       Link.configure({
         openOnClick: false,
@@ -130,47 +269,32 @@ export function EditNoteModal<TDraft extends BaseDraft>({
 
     editorProps: {
       attributes: {
-        // ✅ h-full so the editor surface can fill the available height
         class:
           "tiptap h-full w-full rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20",
       },
 
       // ✅ Right-click menu that ONLY triggers inside tables.
-      // Important: right-click doesn't move selection by default, so we move it manually first.
       handleDOMEvents: {
         contextmenu: (view, event) => {
           const e = event as MouseEvent;
 
-          // Figure out the doc position at click coords
           const hit = view.posAtCoords({ left: e.clientX, top: e.clientY });
           if (!hit) return false; // let browser menu happen
 
-          // Move selection to where user right-clicked, then focus editor
           const tr = view.state.tr.setSelection(
             TextSelection.near(view.state.doc.resolve(hit.pos))
           );
           view.dispatch(tr);
           view.focus();
 
-          // Now the editor's "active" state reflects the clicked cell/node
-          const isInTable = !!editor?.isActive("table");
-          if (!isInTable) return false; // outside table => keep browser menu
+          // Only open our menu if inside a table
+          const ed = editor;
+          if (!ed) return false;
+          if (!ed.isActive("table")) return false;
 
-          // Inside table => suppress browser menu and open ours
           e.preventDefault();
-
-          // Clamp menu to viewport so it doesn't go off-screen
-          const MENU_W = 240;
-          const MENU_H = 360;
-          const pad = 8;
-          const vw = window.innerWidth;
-          const vh = window.innerHeight;
-
-          const x = Math.min(Math.max(e.clientX, pad), vw - MENU_W - pad);
-          const y = Math.min(Math.max(e.clientY, pad), vh - MENU_H - pad);
-
-          setTableMenu({ open: true, x, y });
-          return true; // handled
+          setTableMenu({ open: true, x: e.clientX, y: e.clientY });
+          return true;
         },
       },
     },
@@ -178,16 +302,25 @@ export function EditNoteModal<TDraft extends BaseDraft>({
     onUpdate: ({ editor }) => {
       setDraft((d) => ({ ...d, text: JSON.stringify(editor.getJSON()) }));
       syncToolbar(editor);
+      syncBubble(editor);
     },
-    onSelectionUpdate: ({ editor }) => syncToolbar(editor),
-    onTransaction: ({ editor }) => syncToolbar(editor),
+    onSelectionUpdate: ({ editor }) => {
+      syncToolbar(editor);
+      syncBubble(editor);
+    },
+    onTransaction: ({ editor }) => {
+      syncToolbar(editor);
+      syncBubble(editor);
+    },
 
     onFocus: ({ editor }) => {
       setHasEditorFocus(true);
       syncToolbar(editor);
+      syncBubble(editor);
     },
     onBlur: ({ editor }) => {
       setHasEditorFocus(false);
+      setBubble({ open: false, x: 0, y: 0 });
       syncToolbar(editor);
     },
   });
@@ -199,82 +332,43 @@ export function EditNoteModal<TDraft extends BaseDraft>({
     const { empty, $from } = state.selection;
 
     const marks = empty ? state.storedMarks ?? $from.marks() : null;
-
-    const markOn = (name: string) =>
-      empty ? !!marks?.some((m) => m.type.name === name) || ed.isActive(name) : ed.isActive(name);
-
-    const nodeOn = (name: string, attrs?: Record<string, any>) => ed.isActive(name, attrs);
+    const hasMark = (name: string) =>
+      (marks ? marks.some((m) => m.type.name === name) : ed.isActive(name)) ?? false;
 
     setToolbar({
-      bold: markOn("bold"),
-      italic: markOn("italic"),
-      code: markOn("code"),
-      link: markOn("link"),
-      bulletList: nodeOn("bulletList"),
-      blockquote: nodeOn("blockquote"),
-      h1: nodeOn("heading", { level: 1 }),
-      table: nodeOn("table"),
+      bold: hasMark("bold"),
+      italic: hasMark("italic"),
+      code: hasMark("code"),
+      link: ed.isActive("link"),
+      h1: ed.isActive("heading", { level: 1 }),
+      bullets: ed.isActive("bulletList"),
+      quote: ed.isActive("blockquote"),
+      codeBlock: ed.isActive("codeBlock"),
+      table: ed.isActive("table"),
     });
   }
 
-  // Ensure content is set when opening (without emitting update)
-  const prevOpen = useRef(false);
-  useEffect(() => {
-    if (!editor) return;
-    if (!prevOpen.current && open) {
-      const content = tryParseTiptapJSON(draft.text) ?? tiptapDocFromPlainText(draft.text || "");
-      editor.commands.setContent(content, { emitUpdate: false });
-      requestAnimationFrame(() => syncToolbar(editor));
-    }
-    prevOpen.current = open;
-  }, [editor, open, draft.text]);
+  function syncBubble(ed = editor) {
+    if (!ed) return;
+    const { state, view } = ed;
+    const { from, to, empty } = state.selection;
 
-  // Dirty snapshot
-  const [originalDraft, setOriginalDraft] = useState<{ title: string; text: string } | null>(null);
-  useEffect(() => {
-    if (!open) return;
-    setOriginalDraft({ title: draft.title, text: draft.text });
-  }, [open]); // only on open
-
-  const isDirty =
-    originalDraft !== null &&
-    (draft.title !== originalDraft.title || draft.text !== originalDraft.text);
-
-  // Escape + Ctrl/Cmd+Enter
-  useEffect(() => {
-    if (!open) return;
-
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.preventDefault();
-
-        if (linkModalOpen) {
-          setLinkModalOpen(false);
-          return;
-        }
-
-        if (tableMenu.open) {
-          closeTableMenu();
-          return;
-        }
-
-        onClose();
-        return;
-      }
-
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-        e.preventDefault();
-        if (!isDirty) return;
-        onCommit();
-        onClose();
-      }
+    // Only show when focused + non-empty selection
+    if (!hasEditorFocus || empty || from === to) {
+      setBubble((b) => (b.open ? { open: false, x: 0, y: 0 } : b));
+      return;
     }
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose, onCommit, isDirty, linkModalOpen, tableMenu.open]);
-
-  if (!open) return null;
+    try {
+      const a = view.coordsAtPos(from);
+      const b = view.coordsAtPos(to);
+      const x = (a.left + b.right) / 2;
+      const y = Math.min(a.top, b.top) - 10; // above selection
+      setBubble({ open: true, x, y });
+    } catch {
+      setBubble({ open: false, x: 0, y: 0 });
+    }
+  }
 
   const toolBtn = (active: boolean) =>
     [
@@ -283,11 +377,11 @@ export function EditNoteModal<TDraft extends BaseDraft>({
       "focus:outline-none focus:ring-2 focus:ring-indigo-500/20",
       active
         ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-100 shadow-[0_0_0_1px_rgba(99,102,241,0.25)]"
-        : "bg-white/[0.03]",
+        : "",
     ].join(" ");
 
-  const toolBtnDisabled = (active: boolean) =>
-    toolBtn(active) + " opacity-50 cursor-not-allowed hover:bg-white/[0.03]";
+  const toolBtnDisabled =
+    "rounded-lg border px-2 py-1 text-xs transition border-white/10 text-zinc-400 opacity-50 cursor-not-allowed hover:bg-white/[0.03]";
 
   // ---- formatting actions ----
   const onBold = () => {
@@ -297,24 +391,7 @@ export function EditNoteModal<TDraft extends BaseDraft>({
   };
   const onItalic = () => editor?.chain().focus().toggleItalic().run();
   const onCode = () => editor?.chain().focus().toggleCode().run();
-  const onBullets = () => editor?.chain().focus().clearNodes().toggleBulletList().run();
-  const onQuote = () => editor?.chain().focus().clearNodes().toggleBlockquote().run();
-  const onH1 = () => editor?.chain().focus().clearNodes().toggleHeading({ level: 1 }).run();
 
-  // ---- table insert ----
-  const onInsertTable = () => {
-    if (!editor) return;
-    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
-    requestAnimationFrame(() => syncToolbar(editor));
-  };
-
-  const runTableCmd = (fn: () => void) => {
-    fn();
-    closeTableMenu();
-    requestAnimationFrame(() => syncToolbar(editor));
-  };
-
-  // ---- link actions ----
   const canLinkNow = editor ? !editor.state.selection.empty : false;
 
   const onLink = () => {
@@ -326,36 +403,62 @@ export function EditNoteModal<TDraft extends BaseDraft>({
 
   const applyLink = () => {
     if (!editor) return;
-
-    const href = normalizeUrl(linkUrl);
-    if (!href) {
-      editor.chain().focus().extendMarkRange("link").unsetLink().run();
-    } else {
-      editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+    const url = normalizeUrl(linkUrl);
+    if (!url) {
+      editor.chain().focus().unsetLink().run();
+      setLinkModalOpen(false);
+      return;
     }
-
+    editor.chain().focus().extendMarkRange("link").setLink({ href: url }).run();
     setLinkModalOpen(false);
-    requestAnimationFrame(() => syncToolbar(editor));
+    syncToolbar(editor);
   };
 
   const removeLink = () => {
     if (!editor) return;
-    editor.chain().focus().extendMarkRange("link").unsetLink().run();
+    editor.chain().focus().unsetLink().run();
     setLinkModalOpen(false);
-    requestAnimationFrame(() => syncToolbar(editor));
+    syncToolbar(editor);
   };
 
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm"
-      onMouseDown={() => {
-        if (tableMenu.open) closeTableMenu();
-        onClose();
-      }}
+  const MenuItem = ({
+    label,
+    onClick,
+    danger,
+  }: {
+    label: string;
+    onClick: () => void;
+    danger?: boolean;
+  }) => (
+    <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={onClick}
+      className={[
+        "w-full text-left px-3 py-2 text-sm rounded-lg transition",
+        danger ? "text-rose-200 hover:bg-rose-500/10" : "text-zinc-200 hover:bg-white/10",
+      ].join(" ")}
     >
+      {label}
+    </button>
+  );
+
+  const runTableCmd = (fn: () => void) => {
+    if (!editor) return;
+    closeTableMenu();
+    requestAnimationFrame(() => {
+      fn();
+      syncToolbar(editor);
+    });
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-3 pt-10">
+
       <div
-        // ✅ 80% viewport height + min-h-0 so the editor can actually expand and scroll correctly
-        className="mt-24 w-[95vw] sm:w-[90vw] lg:w-[80vw] max-w-[80vw] h-[80vh] min-h-0 rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col overflow-hidden"
+        className="w-[95vw] sm:w-[90vw] lg:w-[80vw] max-w-[80vw] h-[80vh] rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl flex flex-col overflow-hidden"
         onMouseDown={(e) => {
           e.stopPropagation();
           if (tableMenu.open) closeTableMenu();
@@ -368,97 +471,39 @@ export function EditNoteModal<TDraft extends BaseDraft>({
           className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
         />
 
-        {/* Toolbar (kept small) */}
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <div className="flex flex-wrap gap-1">
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onBold}
-              className={toolBtn(toolbar.bold)}
-              title="Bold (Ctrl/Cmd+B)"
-            >
-              B
-            </button>
-
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onItalic}
-              className={toolBtn(toolbar.italic)}
-              title="Italic (Ctrl/Cmd+I)"
-            >
-              i
-            </button>
-
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onCode}
-              className={toolBtn(toolbar.code)}
-              title="Inline code"
-            >
-              {"</>"}
-            </button>
-
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onBullets}
-              className={toolBtn(toolbar.bulletList)}
-              title="Bulleted list"
-            >
-              •
-            </button>
-
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onQuote}
-              className={toolBtn(toolbar.blockquote)}
-              title="Quote"
-            >
-              “”
-            </button>
-
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onH1}
-              className={toolBtn(toolbar.h1)}
-              title="Heading"
-            >
-              H
-            </button>
-
-            {/* ✅ Keep just "insert table" in main toolbar */}
-            <button
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onInsertTable}
-              className={toolBtn(false)}
-              title="Insert table (3×3)"
-            >
-              ⊞
-            </button>
-
-            <button
-              type="button"
-              disabled={!canLinkNow}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={onLink}
-              className={canLinkNow ? toolBtn(toolbar.link) : toolBtnDisabled(false)}
-              title="Link"
-            >
-              🔗
-            </button>
-          </div>
-
-          <div className="text-[11px] text-zinc-500">{hasEditorFocus ? "Editing…" : ""}</div>
-        </div>
-
         {/* ✅ Editor fills remaining modal height */}
         <div className="mt-3 flex-1 min-h-0 overflow-hidden rounded-xl relative flex">
+          {/* Bubble menu (selection-based) */}
+          {editor && bubble.open && (
+            <div
+              className="fixed z-[75] -translate-x-1/2 -translate-y-full rounded-xl border border-white/10 bg-[#0B0D12] p-1 shadow-2xl"
+              style={{ left: bubble.x, top: bubble.y }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <div className="flex items-center gap-1">
+                <button type="button" onClick={onBold} className={toolBtn(toolbar.bold)} title="Bold (Ctrl/Cmd+B)">
+                  <b>B</b>
+                </button>
+                <button type="button" onClick={onItalic} className={toolBtn(toolbar.italic)} title="Italic (Ctrl/Cmd+I)">
+                  <i>I</i>
+                </button>
+                <button type="button" onClick={onCode} className={toolBtn(toolbar.code)} title="Inline code">
+                  {"</>"}
+                </button>
+                <button
+                  type="button"
+                  disabled={!canLinkNow}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={onLink}
+                  className={canLinkNow ? toolBtn(toolbar.link) : toolBtnDisabled}
+                  title="Link"
+                >
+                  🔗
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Scroll container */}
           <div className="flex-1 min-h-0 overflow-y-auto">
             <EditorContent editor={editor} className="h-full" />
@@ -466,58 +511,24 @@ export function EditNoteModal<TDraft extends BaseDraft>({
 
           {/* ✅ Table context menu (opens only when right-click is inside a table) */}
           {tableMenu.open && editor && editor.isActive("table") && (
-            <div
-              className="fixed z-[70]"
-              style={{ left: tableMenu.x, top: tableMenu.y }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="w-60 rounded-xl border border-white/10 bg-[#0B0D12] shadow-2xl overflow-hidden">
-                <div className="px-3 py-2 text-[11px] text-zinc-400 border-b border-white/10">
-                  Table options
-                </div>
-
-                <MenuItem
-                  label="Add row above"
-                  onClick={() => runTableCmd(() => editor.chain().focus().addRowBefore().run())}
-                />
+            <div className="fixed z-[70]" style={{ left: tableMenu.x, top: tableMenu.y }}>
+              <div className="w-56 rounded-xl border border-white/10 bg-[#0B0D12] shadow-2xl p-1">
                 <MenuItem
                   label="Add row below"
                   onClick={() => runTableCmd(() => editor.chain().focus().addRowAfter().run())}
-                />
-
-                <div className="h-px bg-white/10 my-1" />
-
-                <MenuItem
-                  label="Add column left"
-                  onClick={() => runTableCmd(() => editor.chain().focus().addColumnBefore().run())}
                 />
                 <MenuItem
                   label="Add column right"
                   onClick={() => runTableCmd(() => editor.chain().focus().addColumnAfter().run())}
                 />
-
-                <div className="h-px bg-white/10 my-1" />
-
                 <MenuItem
                   label="Delete row"
-                  danger
                   onClick={() => runTableCmd(() => editor.chain().focus().deleteRow().run())}
                 />
                 <MenuItem
                   label="Delete column"
-                  danger
                   onClick={() => runTableCmd(() => editor.chain().focus().deleteColumn().run())}
                 />
-
-                <div className="h-px bg-white/10 my-1" />
-
-                <MenuItem
-                  label="Toggle header row"
-                  onClick={() => runTableCmd(() => editor.chain().focus().toggleHeaderRow().run())}
-                />
-
-                <div className="h-px bg-white/10 my-1" />
-
                 <MenuItem
                   label="Delete table"
                   danger
@@ -540,38 +551,18 @@ export function EditNoteModal<TDraft extends BaseDraft>({
 
         {/* Link modal */}
         {linkModalOpen && (
-          <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm"
-            onMouseDown={() => setLinkModalOpen(false)}
-          >
-            <div
-              className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl"
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="text-sm font-semibold text-zinc-100">Add link</div>
-              <div className="mt-2 text-xs text-zinc-400">
-                Paste a full URL or just a domain (we’ll add https:// automatically).
-              </div>
+          <div className="fixed inset-0 z-[90] bg-black/60 flex items-center justify-center p-3">
+            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#0B0D12] p-4 shadow-2xl">
+              <div className="text-sm text-zinc-100 mb-2">Add / Edit link</div>
 
               <input
-                autoFocus
                 value={linkUrl}
                 onChange={(e) => setLinkUrl(e.target.value)}
                 placeholder="https://example.com"
-                className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    applyLink();
-                  }
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    setLinkModalOpen(false);
-                  }
-                }}
+                className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-zinc-100 outline-none focus:ring-4 focus:ring-indigo-500/20"
               />
 
-              <div className="mt-4 flex items-center justify-between">
+              <div className="mt-3 flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={removeLink}
@@ -591,7 +582,7 @@ export function EditNoteModal<TDraft extends BaseDraft>({
                   <button
                     type="button"
                     onClick={applyLink}
-                    className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                    className="rounded-xl border border-indigo-400/40 bg-indigo-500/20 px-3 py-2 text-sm text-indigo-100 hover:bg-indigo-500/25"
                   >
                     Apply
                   </button>
@@ -601,60 +592,24 @@ export function EditNoteModal<TDraft extends BaseDraft>({
           </div>
         )}
 
-        {/* Footer buttons */}
-        <div className="mt-4 flex items-center justify-between">
+        {/* Footer buttons (kept since your component expects onCommit/onClose) */}
+        <div className="mt-3 flex items-center justify-end gap-2">
           <button
-            onClick={() => {
-              if (tableMenu.open) closeTableMenu();
-              onClose();
-            }}
+            type="button"
+            onClick={onClose}
             className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-zinc-200 hover:bg-white/[0.06]"
           >
-            {UI.cancel}
+            Close
           </button>
-
           <button
-            disabled={!isDirty}
-            onClick={() => {
-              if (!isDirty) return;
-              onCommit();
-              onClose();
-            }}
-            className={
-              isDirty
-                ? "inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-                : "inline-flex items-center gap-2 rounded-xl bg-white/[0.08] px-4 py-2 text-sm font-semibold text-zinc-400 cursor-not-allowed"
-            }
+            type="button"
+            onClick={onCommit}
+            className="rounded-xl border border-indigo-400/40 bg-indigo-500/20 px-3 py-2 text-sm text-indigo-100 hover:bg-indigo-500/25"
           >
-            {UI.save}
+            Done
           </button>
         </div>
       </div>
     </div>
-  );
-}
-
-function MenuItem({
-  label,
-  onClick,
-  danger,
-}: {
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={onClick}
-      className={[
-        "w-full text-left px-3 py-2 text-sm transition",
-        "hover:bg-white/[0.06]",
-        danger ? "text-rose-300 hover:text-rose-200" : "text-zinc-200",
-      ].join(" ")}
-    >
-      {label}
-    </button>
   );
 }
